@@ -11,7 +11,7 @@ using namespace std;
 using namespace rapidjson;
 
 //#define SPGDETECTIONDEBUG
-#define PROGRESSCHECKING 
+//#define PROGRESSCHECKING 
 
 bool spgdetection(Document &document) {
 	/*
@@ -107,6 +107,9 @@ int main(int argc, char **argv) {
 	int cnt = 0, cntspg = 0;
 	while (inputfile.getline(mol, size)) {
 		cnt++;
+		if (cnt % 100000 == 0) {
+			cout << "progress: " << cnt * 100.0 / 7775740 << endl;
+		}
 #ifdef PROGRESSCHECKING
 		printf("%d | %s\n", cnt, mol);
 #endif
