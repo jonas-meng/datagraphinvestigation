@@ -6,6 +6,7 @@
 #include <map>
 #include <set>
 #include <queue>
+#include <cstdio>
 
 using namespace std;
 using namespace rapidjson;
@@ -60,11 +61,12 @@ bool spgdetection(Document &document) {
 			dict[endPoint[0]].insert(endPoint[1]);
 			dict[endPoint[1]].insert(endPoint[0]);
 			// if any vertex only has two neighbors, then put it into SC-queue
-			if (dict[endPoint[0]].size() == 2) {
+			// Such element should not be in element set, otherwise might cause inifite loop
+			if (dict[endPoint[0]].size() == 2 && element.find(endPoint[0]) != element.end()) {
 				scqueue.push(endPoint[0]);
 				element.erase(endPoint[0]);
 			}
-			if (dict[endPoint[1]].size() == 2) {
+			if (dict[endPoint[1]].size() == 2 && element.find(endPoint[1]) != element.end()) {
 				scqueue.push(endPoint[1]);
 				element.erase(endPoint[1]);
 			}
@@ -107,8 +109,8 @@ int main(int argc, char **argv) {
 	int cnt = 0, cntspg = 0;
 	while (inputfile.getline(mol, size)) {
 		cnt++;
-		if (cnt % 100000 == 0) {
-			cout << "progress: " << cnt * 100.0 / 7775740 << endl;
+		if (cnt % 10000 == 0) {			
+			printf("\r%.2f", (cnt*100.0/2000000));
 		}
 #ifdef PROGRESSCHECKING
 		printf("%d | %s\n", cnt, mol);

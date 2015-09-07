@@ -1,0 +1,14 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import json
+import csv
+import sys
+from sets import Set
+
+with open(sys.argv[2], 'w') as output:
+    writer = csv.writer(output)
+    writer.writerow(['id', 'edge', 'node'])
+    with open(sys.argv[1], 'r') as data:
+        for line in data:
+            item = json.loads(line)
+            writer.writerow([item["id"], len(item["bond"]["aid1"]), len(Set(item["bond"]["aid1"]+item["bond"]["aid2"]))])
