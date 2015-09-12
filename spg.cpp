@@ -1,5 +1,7 @@
 #include "dependency/rapidjson/filereadstream.h"
 #include "dependency/rapidjson/document.h"
+#include "dependency/threadpool.h"
+
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -10,6 +12,8 @@
 #include <vector>
 #include <algorithm>
 #include <iterator>
+#include <sstream>
+#include <unistd.h>
 
 using namespace std;
 using namespace rapidjson;
@@ -17,6 +21,8 @@ using namespace rapidjson;
 typedef set <int> edgeset;
 typedef vector < set <int> > graph;
 typedef map <set <int>, set < vector< set<int> > > > termspgset;
+
+Mutex output;
 
 #define EDGE 1
 #define NODE 0
@@ -277,7 +283,7 @@ bool iteration(termspgset &oldset, termspgset &newset,
 	return isLoop;
 }
 
-void enumeratingspg(Document &document) {
+void enumeratingspg(Document &document, stringstream &res) {
 	/*
 	 * 1. label edge - a map of edge-terminal
 	 * 2. construct three terminal-spg mapping for sequential steps
@@ -330,22 +336,47 @@ void enumeratingspg(Document &document) {
 	
 	vector<int> violator;
 	set<int>::iterator it = (*maxitr)[EDGE].begin();
-	cout << "," << sz_max <<",\"" << *it;
+	res << "," << sz_max <<",\"" << *it;
 	for (it++; it != (*maxitr)[EDGE].end(); it++)
-		cout << "," << *it;
+		res << "," << *it;
 	int sz_vio = document["bond"]["aid1"].Size() - sz_max;
 	set_difference(edges.begin(), edges.end(),
 			(*maxitr)[EDGE].begin(), (*maxitr)[EDGE].end(),
 			back_inserter(violator));
 	if (violator.size() > 0) {
 		vector<int>::iterator vioit = violator.begin();
-		cout << "\"," << sz_vio << ",\"" << *vioit;
+		res << "\"," << sz_vio << ",\"" << *vioit;
 		for (vioit++; vioit != violator.end(); vioit++)
-			cout << "," << *vioit;
-		cout << "\"" << endl;
+			res << "," << *vioit;
+		res << "\"";
 	} else {
-		cout << "\",0,\"\"" << endl;
+		res << "\",0,\"\"";
 	}
+}
+
+void maxspgidentification(void* arg) {
+	stringstream res;
+	Document &document = *((Document*)arg);
+	res << document["id"].GetString();
+	// omit graphs whose size is less than 0 or larger than 60
+	if(document["bond"]["aid1"].Size() <= 0 ||
+			document["bond"]["aid1"].Size() > 60) {
+		res << ",0,\"\",0,\"\"";
+	} else {
+		if(spgdetection(document)) {
+			res << "," << document["bond"]["aid1"].Size() << ",\"0";
+			for (int i = 1; i < document["bond"]["aid1"].Size(); i++)
+				res << "," << i;
+			res << "\",0,\"\"";
+		} else {
+			enumeratingspg(document, res);
+		}
+	}
+	output.lock();
+	cout << res.str() << endl;
+	output.unlock();
+	delete (Document*)arg;
+	arg = NULL;
 }
 
 int main(int argc, char **argv) {
@@ -353,43 +384,18 @@ int main(int argc, char **argv) {
 	 * by reading JSON object line by line and parse it, problem solved
 	 * */
 	ifstream inputfile(argv[1]);
-	int size = 65536;
+	int size = 65536, nofthreads = 3;
 	char mol[65536];
-	Document document;
-	int cnt = 0, cntspg = 0;
+	Document *document;
+	ThreadPool tp(nofthreads);
+	int ret = tp.initialize_threadpool();
+	cout << "id,sz_max,maximal,sz_vio,violator" << endl;
 	while (inputfile.getline(mol, size)) {
-		cnt++;
-		if (cnt % 20000 == 0) {			
-			fprintf(stderr, "\r%.2f", (cnt*100.0/2000000));
-		}
-#ifdef PROGRESSCHECKING
-		fprintf(stderr, "%d | %s\n", cnt, mol);
-#endif
 		// get single molecule in memory
-		document.Parse(mol);
-		cout << "id,sz_max,maximal,sz_vio,violator" << endl;
-		cout << document["id"].GetString();
-		// omit graphs whose size is less than 0 or larger than 60
-		if(document["bond"]["aid1"].Size() <= 0 ||
-				document["bond"]["aid1"].Size() > 60) {
-			cout << ",0,\"\",0,\"\"" << endl;
-			continue;
-		}
-		if(spgdetection(document)) {
-			cntspg++;
-#ifdef PROGRESSCHECKING
-			fprintf(stderr, "%d is SPG\n", cnt);
-#endif
-			cout << "," << document["bond"]["aid1"].Size() << ",\"0";
-			for (int i = 1; i < document["bond"]["aid1"].Size(); i++)
-				cout << "," << i;
-			cout << "\",0,\"\"" << endl;
-		} else {
-#ifdef PROGRESSCHECKING
-			fprintf(stderr, "%d is not SPG\n", cnt);
-#endif
-			enumeratingspg(document);
-		}
+		document = new Document();
+		document->Parse(mol);
+		Task *t = new Task(&maxspgidentification, (void*)document);
+		tp.add_task(t);
 	}
 	// print information regarding percentage of SPG in database
 	//printf("total number = %d, number of spg = %d, percentage = %.2f\n", cnt, cntspg, cntspg * 100.0 / cnt);
@@ -397,6 +403,14 @@ int main(int argc, char **argv) {
 	//#pragma omp parallel for
 	
 	//fclose(fp);
+	int tn = tp.task_number();
+	while (tn > 0) {
+		cerr << tn << endl;
+		tn = tp.task_number();
+		sleep(60);	
+	}
+
+	tp.destroy_threadpool();
 	
 	return 0;
 }
