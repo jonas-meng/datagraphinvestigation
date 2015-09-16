@@ -3,8 +3,8 @@
 import pybel
 import openbabel
 import json
-import pprint
 import sys
+import os
 
 def bondExtractor(mol):
 	#print mol.data['EMOL_VERSION_ID']
@@ -15,10 +15,21 @@ def bondExtractor(mol):
 				"aid1": [obbond.GetBeginAtomIdx() for obbond in openbabel.OBMolBondIter(mol.OBMol)],
 				"aid2": [obbond.GetEndAtomIdx() for obbond in openbabel.OBMolBondIter(mol.OBMol)],
 				}}
-cnt = 0
-for mol in pybel.readfile("sdf", "data/emolecules.sdf"):
-    print json.dumps(bondExtractor(mol))
-    cnt += 1
-    if cnt % 100000 == 0:
-        sys.stderr.write("{:.2f}\n".format(cnt / float(7775740) * 100))
-sys.stderr.write("Finished.\n")
+
+def singlesdfprocess(fname):
+    cnt = 0
+    sys.stderr.write("{0} start.\n".format(fname))
+    with open(fname + '.txt', 'a') as output:
+        for mol in pybel.readfile("sdf", fname):
+            cnt += 1
+            output.write(json.dumps(bondExtractor(mol)))
+            output.write('\n')
+            if cnt % 1000000 == 0:
+                sys.stderr.write("{0}\n".format(cnt))
+    sys.stderr.write("{0} finished.\n".format(fname))
+
+for f in os.listdir(sys.argv[1]):
+    fname = os.path.join(sys.argv[1], f)
+    if os.path.isfile(fname) and fname.endswith('.gz'):
+        singlesdfprocess(fname)
+        
