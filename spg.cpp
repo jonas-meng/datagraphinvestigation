@@ -45,9 +45,10 @@ void printgraph(const graph & g) {
 void spgdetection(void *d) {
 	/*
 	 * 1. build a map <key, set> where key is index of vertex and set is adjacent vertices
-	 * 2. set up 2-queue and set of all vertices
-	 * 3. proceed with elements in 2-queue untile the queue becomes empty
-	 * 4. remove all pendant vertices and insert elements with degree 2 into 2-queue,
+	 * 2. set up 2-queue whoes elements are all vertices with degree two
+	 * and set of all vertices
+	 * 3. process elements in 2-queue untile the queue becomes empty
+	 * 4. remove all pendant vertices and insert elements with degree 2 into 2-queue if available,
 	 * if 2-queue is not empty, then go to step 3; otherwise, proceed to step 5
 	 * 5. based on szie of vertex set, whether a graph is SPG can be determined
 	 * */
@@ -77,7 +78,8 @@ void spgdetection(void *d) {
 
 	int idx;
 	int endPoint[2];
-	while (scqueue.size() > 0) {
+	bool is2q = true;
+	while (is2q) {
 		// serial & parallel reduction
 		while (scqueue.size() > 0) {
 			idx = scqueue.front();
@@ -123,7 +125,7 @@ void spgdetection(void *d) {
 	#endif
 			}
 	#ifdef SPGDETECTIONDEBUG
-			cout << "element set : {";
+			cout << "current element set : {";
 			for (set<int>::iterator sitr = element.begin(); sitr != element.end(); ++sitr) {
 				cout << *sitr << ", ";
 			}
@@ -141,7 +143,10 @@ void spgdetection(void *d) {
 			}
 			// remove those vertices from node set
 			for (set<int>::iterator sitr = pendantvetices.begin(); sitr != pendantvetices.end(); ++sitr) {
-				element.erase(*sitr);	
+				element.erase(*sitr);
+	#ifdef SPGDETECTIONDEBUG
+				cout << "remove pendant vertex " << idx << endl;
+	#endif
 				a = *(dict[*sitr].begin());
 				dict[a].erase(*sitr);
 				if (dict[a].size() == 2) {
@@ -150,242 +155,16 @@ void spgdetection(void *d) {
 				}
 			}
 		}
+		is2q = scqueue.size() > 0;
 	}
 	
 	if (element.size() <= 2) {
 		output.lock();
+		cout << document["id"].GetString() << " is GSPG" << endl;
 		spgcnt++;
 		output.unlock();
 	}
 	delete (Document*)d;
-//	return (element.size() <= 2); // SPG should be reduced to one single arc
-
-}
-
-void serialcomb(termspgset &oldset, termspgset &newset,
-		termspgset &intermidateset, map <int, set <int> > &terminals) {
-	int p[2]; // two terminals
-	for (termspgset::iterator it = newset.begin(); it != newset.end(); it++) {
-		// obtain two terminals
-		p[0] = *((it->first).begin());	
-		p[1] = *((it->first).rbegin());	
-		for (int i = 0; i < 2; i ++) {
-			// check whether there are other nodes connecting to one of those terminals
-			if (terminals.find(p[i]) == terminals.end())
-				continue;
-			
-			for (set<int>::iterator itr = terminals[p[i]].begin();
-					itr != terminals[p[i]].end(); itr++) {
-				if (*itr == p[(i+1)%2]) 
-					continue;
-				set<int> key;
-				key.insert(p[i]);
-				key.insert(*itr);
-				set<graph > *oldspg = &oldset[key];
-				key.erase(p[i]);
-				key.insert(p[(i+1)%2]);
-				graph tmp;
-				vector<int> stmp;
-				// enumerating all possible combination of SPGs from new and old SPG sets
-				for (set<graph>::iterator oldit = oldspg->begin();
-						oldit != oldspg->end(); oldit++) {
-					for (set<graph>::iterator newit = (it->second).begin();
-							newit != (it->second).end(); newit++) {
-						// std::back_inserter is necessary because no memory is allocated to
-						// vector tmp right now
-						stmp.clear();
-						set_intersection((*newit)[NODE].begin(), (*newit)[NODE].end(),
-								(*oldit)[NODE].begin(), (*oldit)[NODE].end(),
-								back_inserter(stmp));
-						// if two SPGs contain no same arcs, then perform serial combination
-						if (stmp.size() <= 1) { // serial combination should only has one single shared terminal
-							stmp.clear();
-							tmp.clear();
-							set_union((*newit)[NODE].begin(), (*newit)[NODE].end(),
-									(*oldit)[NODE].begin(), (*oldit)[NODE].end(),
-									back_inserter(stmp));
-							tmp.push_back(set<int>(stmp.begin(), stmp.end())); // push node set into graph representation
-							stmp.clear();
-							set_union((*newit)[EDGE].begin(), (*newit)[EDGE].end(),
-									(*oldit)[EDGE].begin(), (*oldit)[EDGE].end(),
-									back_inserter(stmp));
-							tmp.push_back(set<int>(stmp.begin(), stmp.end())); // push edge set into graph representation
-#ifdef MAXIMALSPG
-							cerr << "-------------serial----------------" << endl;
-							printgraph(*newit);
-							printgraph(*oldit);
-							cerr << "->" << endl;
-							printgraph(tmp);
-#endif
-							if (oldset[key].find(tmp) == oldset[key].end() &&
-									newset[key].find(tmp) == newset[key].end()) {
-								intermidateset[key].insert(tmp);	
-								terminals[p[i]].insert(p[(i+1)%2]);
-								terminals[p[(i+1)%2]].insert(p[i]);
-							}
-						}
-					}
-				}
-			}		
-
-		}
-	}
-}
-
-void parallelcomb(termspgset &oldset, termspgset &newset,
-	   	termspgset &intermidateset) {
-	for (termspgset::iterator it = newset.begin(); 
-			it != newset.end(); it++) {
-		set<int> key = it->first;
-		if (oldset.find(key) == oldset.end())
-			continue;
-		set<graph>& newspg = it->second;
-		graph tmp;
-		vector<int> stmp;
-		// try to combine all SPGs with same terminals
-		for (set<graph>::iterator oldit = oldset[key].begin();
-				oldit != oldset[key].end(); oldit++) {
-			for (set<graph>::iterator newit = newspg.begin();
-					newit != newspg.end(); newit++) {
-				stmp.clear();
-				set_intersection((*newit)[NODE].begin(), (*newit)[NODE].end(),
-						(*oldit)[NODE].begin(), (*oldit)[NODE].end(), 
-						back_inserter(stmp));
-				// if two SPGs contain no same arcs, then perform serial combination
-				if (stmp.size() <= 2) { // for parallel combination, there are at most 2
-					stmp.clear();
-					tmp.clear();
-					set_union((*newit)[NODE].begin(), (*newit)[NODE].end(),
-							(*oldit)[NODE].begin(), (*oldit)[NODE].end(),
-							back_inserter(stmp));
-					tmp.push_back(set<int>(stmp.begin(), stmp.end())); // push node set into graph represetnation
-					stmp.clear();
-					// because size of result of set union definitely larger than
-					// size of result of set intersection, which leads to overwrite of last result
-					// therefore set clear operation is ignored
-					// c++ union operation only add same element once
-					set_union((*newit)[EDGE].begin(), (*newit)[EDGE].end(),
-							(*oldit)[EDGE].begin(), (*oldit)[EDGE].end(),
-							back_inserter(stmp));
-					tmp.push_back(set<int>(stmp.begin(), stmp.end())); // push edge set into graph represetnation
-#ifdef MAXIMALSPG
-					cerr << "--------------parallel--------------------" << endl;
-					printgraph(*newit);
-					printgraph(*oldit);
-					cerr << "->" << endl;
-					printgraph(tmp);
-#endif
-					if (oldset[key].find(tmp) == oldset[key].end() &&
-							newset[key].find(tmp) == newset[key].end())
-						intermidateset[key].insert(tmp);
-				}
-			}
-		}	
-	}
-}
-
-bool iteration(termspgset &oldset, termspgset &newset,
-		termspgset &intermidateset, map <int, set <int> > &terminals) {
-	serialcomb(oldset, newset, intermidateset, terminals);
-	parallelcomb(oldset, newset, intermidateset);	
-	// merge old and new set
-	for (termspgset::iterator newit = newset.begin();
-			newit != newset.end(); ++newit) {
-		// set difference makes sure that all SPGs in vector are not included in old set
-		vector<graph> tmp; 
-		const set<int> &key = newit->first;
-		// following iterator providing const values which are read-only
-		// therefore no way to compare and copy
-		// possible solution is to write a three set operation manually
-		tmp.clear();
-		set_difference(newset[key].begin(), newset[key].end(),
-				oldset[key].begin(), oldset[key].end(),
-				back_inserter(tmp));
-		oldset[key].insert(tmp.begin(), tmp.end());
-	}
-	bool isLoop = false;
-	if (intermidateset.size() > 0) {
-		// copy intermidate set to new set
-		newset = intermidateset;
-		// clear intermidate set for next iteration
-		intermidateset.clear();
-		isLoop = true;
-	}
-	
-	// if new set is non-empty, then return true to continue iteration
-	// otherwise return false to stop
-	return isLoop;
-}
-
-void enumeratingspg(Document &document, stringstream &res) {
-	/*
-	 * 1. label edge - a map of edge-terminal
-	 * 2. construct three terminal-spg mapping for sequential steps
-	 * 3. serial and parallel combination
-	 * 4. iteration procedure
-	 * */
-	map <int, set <int> > edgelabel;
-	map <int, set <int> > terminals;
-	set <int> edges;
-	termspgset oldset, newset, intermidateset;
-	int sz = document["bond"]["aid1"].Size(), a, b;
-	for (int idx = 0; idx < sz; idx++) {
-		edges.insert(idx);
-		a = document["bond"]["aid1"][idx].GetInt();
-		b = document["bond"]["aid2"][idx].GetInt();
-		terminals[a].insert(b);
-		terminals[b].insert(a);
-		edgelabel[idx].insert(a);
-		edgelabel[idx].insert(b);
-		// create a spg with both edge and node set
-		set <int> edge;
-		edge.insert(idx);
-		set <int> node;
-		node.insert(a);
-		node.insert(b);
-		vector <set <int> > tmp;
-		tmp.push_back(node);
-		tmp.push_back(edge);
-		// insert spg into old and new set
-		oldset[edgelabel[idx]].insert(tmp);
-		newset[edgelabel[idx]].insert(tmp);
-	}
-	
-	while (iteration(oldset, newset, intermidateset, terminals))
-		;
-
-	// identify maximal sub-SPG and corresponding violator set
-	int sz_max = 0;
-	set<graph>::iterator maxitr;
-	for (termspgset::iterator it = oldset.begin();
-			it != oldset.end(); it++) {
-		for (set<graph>::iterator ssit = (it->second).begin();
-				ssit != (it->second).end(); ++ssit) {
-			if ((*ssit)[EDGE].size() > sz_max) {
-				sz_max = (*ssit)[EDGE].size();
-				maxitr = ssit;
-			}
-		}
-	}
-	
-	vector<int> violator;
-	set<int>::iterator it = (*maxitr)[EDGE].begin();
-	res << "," << sz_max <<",\"" << *it;
-	for (it++; it != (*maxitr)[EDGE].end(); it++)
-		res << "," << *it;
-	int sz_vio = document["bond"]["aid1"].Size() - sz_max;
-	set_difference(edges.begin(), edges.end(),
-			(*maxitr)[EDGE].begin(), (*maxitr)[EDGE].end(),
-			back_inserter(violator));
-	if (violator.size() > 0) {
-		vector<int>::iterator vioit = violator.begin();
-		res << "\"," << sz_vio << ",\"" << *vioit;
-		for (vioit++; vioit != violator.end(); vioit++)
-			res << "," << *vioit;
-		res << "\"";
-	} else {
-		res << "\",0,\"\"";
-	}
 }
 
 /*
@@ -405,33 +184,6 @@ void aprxmaxspg(Docment &document, stringstream &res) {
 	 * then it is a complete spruce (notice that the identified are the maxiaml spruce of those base vertices).
 	 * otherwise it is an incomplete spruce.
 	 * * /
-}
-*/
-
-/*
-void maxspgidentification(void* arg) {
-	stringstream res;
-	Document &document = *((Document*)arg);
-	res << document["id"].GetString();
-	// omit graphs whose size is less than 0 or larger than 60
-	if(document["bond"]["aid1"].Size() <= 0 ||
-			document["bond"]["aid1"].Size() > 60) {
-		res << ",0,\"\",0,\"\"";
-	} else {
-		if(spgdetection(document)) {
-			res << "," << document["bond"]["aid1"].Size() << ",\"0";
-			for (int i = 1; i < document["bond"]["aid1"].Size(); i++)
-				res << "," << i;
-			res << "\",0,\"\"";
-		} else {
-			enumeratingspg(document, res);
-		}
-	}
-	output.lock();
-	cout << res.str() << endl;
-	output.unlock();
-	delete (Document*)arg;
-	arg = NULL;
 }
 */
 
@@ -477,7 +229,7 @@ int main(int argc, char **argv) {
 	}
 
 	tp.destroy_threadpool();
-	printf("total number = %d, number of spg = %d, percentage = %.2f\n", cnt, spgcnt, spgcnt * 100.0 / cnt);
+	printf("%d, %d\n", cnt, spgcnt);
 	
 	return 0;
 }
