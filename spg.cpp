@@ -29,18 +29,9 @@ int spgcnt = 0;
 #define NODE 0
 
 //#define SPGDETECTIONDEBUG
-#define PROGRESSCHECKING 
+//#define PROGRESSCHECKING 
 //#define MAXIMALSPG
 
-void printgraph(const graph & g) {
-	cerr << "edge: ";
-	for (set<int>::iterator it = g[EDGE].begin(); it != g[EDGE].end(); it++)
-		cerr << *it << " ";
-	cerr << " node: ";
-	for (set<int>::iterator it = g[NODE].begin(); it != g[NODE].end(); it++)
-		cerr << *it << " ";
-	cerr << endl;
-}
 
 void spgdetection(void *d) {
 	/*
@@ -133,6 +124,11 @@ void spgdetection(void *d) {
 	#endif
 		}
 		if (element.size() > 2) {
+			/*
+			 * Removal of pendant vertices will not result in any pendant vertices;
+			 * otherwise, those resuling pendant vertices are vertex of degree two,
+			 * which have been processed in serial-parallel reduction.
+			 * */
 			// for GSPG, removal of pendant vertex is performed
 			pendantvetices.clear();
 			// identify current vertices with degree one
@@ -145,7 +141,7 @@ void spgdetection(void *d) {
 			for (set<int>::iterator sitr = pendantvetices.begin(); sitr != pendantvetices.end(); ++sitr) {
 				element.erase(*sitr);
 	#ifdef SPGDETECTIONDEBUG
-				cout << "remove pendant vertex " << idx << endl;
+				cout << "remove pendant vertex " << *sitr << endl;
 	#endif
 				a = *(dict[*sitr].begin());
 				dict[a].erase(*sitr);
@@ -167,25 +163,6 @@ void spgdetection(void *d) {
 	delete (Document*)d;
 }
 
-/*
-void aprxmaxspg(Docment &document, stringstream &res) {
-	map <int, set<int> > terminals;
-	int sz = document["bond"]["aid1"].Size(), a, b;
-	for (int idx = 0; idx < sz; idx++) {
-		a = document["bond"]["aid1"][idx].GetInt();
-		b = document["bond"]["aid2"][idx].GetInt();
-		terminals[a].insert(b);
-		terminals[b].insert(a);
-	}
-	/ *
-	 * way to identify spruce -
-	 * intersection of sets of adjacent node of vertices  a and b
-	 * if there is intersection and two nodes are adjacent to each other,
-	 * then it is a complete spruce (notice that the identified are the maxiaml spruce of those base vertices).
-	 * otherwise it is an incomplete spruce.
-	 * * /
-}
-*/
 
 int main(int argc, char **argv) {
 	/*
@@ -214,12 +191,7 @@ int main(int argc, char **argv) {
 		Task *t = new Task(&spgdetection, (void*)document);
 		tp.add_task(t);
 	}
-	// print information regarding percentage of SPG in database
-	//printf("total number = %d, number of spg = %d, percentage = %.2f\n", cnt, cntspg, cntspg * 100.0 / cnt);
-
-	//#pragma omp parallel for
 	
-	//fclose(fp);
 	int tn = tp.task_number();
 	while (tn > 0) {
 		cerr << "task number: " << tn << endl;
