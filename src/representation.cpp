@@ -340,8 +340,15 @@ bool SPGRepresentation::rule1_2() {
 }
 
 
-bool SPGRepresentation::rule1_3() {
-	return false;
+bool SPGRepresentation::rule1_3(Label *edge, int n) {
+	Label *newNodeLabel = new Label();
+	newNodeLabel->leftParenthesis();
+	newNodeLabel->insert(edge->begin(), edge->end());
+	newNodeLabel->rightParenthesis();
+
+	nodeLabelSet[n].push_back(newNodeLabel);
+	delete edge;
+	return true;
 }
 
 bool SPGRepresentation::rule2_1() {
@@ -410,7 +417,7 @@ void SPGRepresentation::serialComposition(std::set<int> &vertexWithDegree2, int 
 	delete t1;
 
 	if (e1 == e2) {
-		nodeLabelSet[e1].push_back(newEdgeLabel);
+		rule1_3(newEdgeLabel, e1);
 	} else {
 		std::set<int> edge;
 		edge.insert(e1);

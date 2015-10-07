@@ -60,6 +60,7 @@ class Label {
 		size_t hashValue() {
 			return hasher(v);
 		}
+		void unpack();
 		
 		bool operator<(Label &rhs);
 		bool operator==(Label &rhs);
@@ -94,7 +95,7 @@ class SPGRepresentation {
 		bool rule0_2();
 		bool rule1_1();
 		bool rule1_2();
-		bool rule1_3();
+		bool rule1_3(Label*, int);
 		bool rule2_1();
 		bool rule2_2(std::set<int> &);
 		void computation();
