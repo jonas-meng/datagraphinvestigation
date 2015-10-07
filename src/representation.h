@@ -1,12 +1,13 @@
 #ifndef REPRESENTATION_H
 #define REPRESENTATION_H
 
-#include "dependency/rapidjson/document.h"
+#include "../dependency/rapidjson/document.h"
 
 #include <vector>
 #include <iostream>
 #include <map>
 #include <set>
+#include <functional>
 
 class Label {
 	/*
@@ -21,6 +22,7 @@ class Label {
 	 * */
 	private:
 		std::vector<bool> v;
+		std::hash<std::vector<bool> > hasher;
 
 	public:
 		static bool comparison(Label* lhs, Label* rhs) { return *lhs < *rhs; }
@@ -55,6 +57,9 @@ class Label {
 		}
 
 		void printReadable();
+		size_t hashValue() {
+			return hasher(v);
+		}
 		
 		bool operator<(Label &rhs);
 		bool operator==(Label &rhs);
@@ -70,6 +75,7 @@ class SPGRepresentation {
 		std::map<int, std::set<int> > adjSet;
 
 		Label *rpr;
+
 	public:	
 		static bool comparisonOfTwoVector(
 				std::vector<Label*> *, 
@@ -79,8 +85,11 @@ class SPGRepresentation {
 				std::vector<Label*> *);
 		
 		SPGRepresentation(rapidjson::Document &);
+		SPGRepresentation(std::set<std::set<int> > &);
 		~SPGRepresentation() { if (rpr) delete rpr; }
 		void initialization(rapidjson::Document &);
+		void initializeNodeLabel();
+		void initializeEdgeLabel(int, int);
 		bool rule0_1();
 		bool rule0_2();
 		bool rule1_1();
@@ -88,20 +97,24 @@ class SPGRepresentation {
 		bool rule1_3();
 		bool rule2_1();
 		bool rule2_2(std::set<int> &);
-		void iteration();
+		void computation();
+		void display(); // display current state including nodelabelset, edgelabelset, and vertexset
+		void printRepresentation();
+		size_t hashValue() {
+			return rpr->hashValue();			
+		}
+
+		bool operator==(SPGRepresentation &rhs);
+		bool operator<(SPGRepresentation &rhs);
+
+	private:
 		std::vector<Label*> *loopLabelGenerator(int, int);
 		int approachEndpoint(int, int, std::set<int> &, std::vector<Label*> *);
 		void serialComposition(std::set<int> &, int);
+		std::vector<Label*>* findMinInLoop(std::vector<Label*>*,int n);
+		void clearNode(int n);
+		void clearEdge(std::set<int> &e);
 
-		void display(); // display current state including nodelabelset, edgelabelset, and vertexset
-		void printRepresentation() { 
-			if(rpr)  {
-				std::cout << "FINAL REPRESENTATION:" << std::endl;
-				rpr->printReadable(); 
-			} else {
-				std::cout << "NO REPRESENTATION AVAILABLE" << std::endl;
-			}
-		}
 };
 
 #endif

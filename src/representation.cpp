@@ -1,4 +1,4 @@
-#include "dependency/rapidjson/document.h"
+#include "../dependency/rapidjson/document.h"
 #include "representation.h"
 #include <vector>
 #include <iostream>
@@ -48,35 +48,66 @@ bool Label::operator<(Label &rhs) {
 	return (it1 == v.end());
 }
 
+bool Label::operator==(Label &rhs) {
+	return ((*this) < rhs && rhs < (*this));
+}
+
 SPGRepresentation::SPGRepresentation(rapidjson::Document &d) {
 	rpr = NULL;
 	initialization(d);
 }
 
+SPGRepresentation::SPGRepresentation(std::set<std::set<int> > &edgeSet) {
+	int a, b;
+	for (std::set<std::set<int> >::iterator it = edgeSet.begin(); it != edgeSet.end(); it++) {
+		a = *(*it).begin();
+		b = *(*it).rbegin();
+
+		initializeEdgeLabel(a, b);
+	}
+	initializeNodeLabel();
+}
+
+bool SPGRepresentation::operator<(SPGRepresentation &rhs) {
+	return (*(this->rpr) < *(rhs.rpr));
+}
+
+bool SPGRepresentation::operator==(SPGRepresentation &rhs) {
+	return (*(this->rpr) == *(rhs.rpr));
+}
+
 void SPGRepresentation::initialization(rapidjson::Document &d) { 
 	int a, b, length = d["bond"]["aid1"].Size();
-	std::set<int> edge;
 	for (int i = 0; i < length; i++) {
 
 		// obtain two end points of one edge
 		a = d["bond"]["aid1"][i].GetInt();
 		b = d["bond"]["aid2"][i].GetInt();
 
-		// insert into adjacent set of each other
-		adjSet[a].insert(b);
-		adjSet[b].insert(a);
-
-		// insert in set of vertex
-		vertexSet.insert(a);
-		vertexSet.insert(b);
-
-		// initialize label set of edge
-		edge.clear();
-		edge.insert(a);
-		edge.insert(b);
-		edgeLabelSet[edge].push_back(new Label(true, true)); 
+		initializeEdgeLabel(a, b);
 	}
 
+	initializeNodeLabel();
+}
+
+void SPGRepresentation::initializeEdgeLabel(int a, int b) {
+	std::set<int> edge;
+	// insert into adjacent set of each other
+	adjSet[a].insert(b);
+	adjSet[b].insert(a);
+
+	// insert in set of vertex
+	vertexSet.insert(a);
+	vertexSet.insert(b);
+
+	// initialize label set of edge
+	edge.clear();
+	edge.insert(a);
+	edge.insert(b);
+	edgeLabelSet[edge].push_back(new Label(true, true)); 
+}
+
+void SPGRepresentation::initializeNodeLabel() {
 	// initialize label set of node
 	for (std::set<int>::iterator it = vertexSet.begin();
 			it != vertexSet.end(); it++) {
@@ -286,13 +317,11 @@ bool SPGRepresentation::rule1_2() {
 		newNodeLabel = new Label();	
 
 		newNodeLabel->leftParenthesis();
-
 		// edge
 		t = *edgeLabelSet[edge].begin();
 		newNodeLabel->insert(t->begin(), t->end());
 		delete t;
 		edgeLabelSet[edge].clear();
-
 		// node
 		t = *nodeLabelSet[*it].begin();
 		newNodeLabel->insert(t->begin(), t->end());
@@ -403,6 +432,7 @@ int SPGRepresentation::approachEndpoint(int a, int b, std::set<int> &vertexWithD
 #endif
 		t->push_back(*nodeLabelSet[a].begin());
 		nodeLabelSet[a].clear();
+
 		if (vertexWithDegree2.find(a) != vertexWithDegree2.end()) {
 			vertexWithDegree2.erase(a);
 			vertexSet.erase(a);
@@ -443,70 +473,67 @@ bool SPGRepresentation::rule2_2(std::set<int> &vertices) {
 #ifdef DEBUG 
 	std::cout << "RULE 2.2 APPLIED" << std::endl;
 #endif
-	int a = *vertices.begin(), b, cnt = 0;
-	std::vector<Label*> *t, *minv;
+	int a = *vertices.begin(), b;
+	std::vector<Label*> *t, *minv1, *minv2;
 
 	// two different direction
 	b = *adjSet[a].begin();
 	t = loopLabelGenerator(a, b);
-	minv = new std::vector<Label*>(t->begin(), t->end());
-	Label *l1, *l2;
-	while (cnt+1 < vertices.size()) {
-		// rotate edge and node label
-		l1 = *(t->begin()), l2 = *(t->begin()+1);
-		for (std::vector<Label*>::iterator it = t->begin();
-				it+2 != t->end(); it += 2) {
-			*it = *(it+2);
-			*(it+1) = *(it+3);
-		}
-		*(t->rbegin()+1) = l1;
-		*(t->rbegin()) = l2;
-
-		if (!SPGRepresentation::comparisonOfTwoVector(minv, t)) {
-			delete minv;
-			minv = new std::vector<Label*>(t->begin(), t->end());
-		}
-		cnt++;
-	}
+	minv1 = findMinInLoop(t, vertices.size());	
 	delete t;
 
 	b = *adjSet[a].rbegin();
 	t = loopLabelGenerator(a, b);
-	cnt = 0;
-	while (cnt < vertices.size()) {
-		l1 = *(t->begin()), l2 = *(t->begin()+1);
-		for (std::vector<Label*>::iterator it = t->begin();
-				it+2 != t->end(); it += 2) {
-			*it = *(it+2);
-			*(it+1) = *(it+3);
-		}
-		*(t->rbegin()+1) = l1;
-		*(t->rbegin()) = l2;
-
-		if (!SPGRepresentation::comparisonOfTwoVector(minv, t)) {
-			delete minv;
-			minv = new std::vector<Label*>(t->begin(), t->end());
-		}
-		cnt++;
-	}
+	minv2 = findMinInLoop(t, vertices.size());
 	delete t;
+
+	if (!SPGRepresentation::comparisonOfTwoVector(minv1, minv2)) {
+		delete minv1;
+		minv1 = minv2;
+	} else {
+		delete minv2;
+		minv2 = NULL;
+	}
 
 	Label *newNodeLabel = new Label();
 	newNodeLabel->leftParenthesis();
-	for (std::vector<Label*>::iterator it = minv->begin();
-			it != minv->end(); it++) {
+	for (std::vector<Label*>::iterator it = minv1->begin();
+			it != minv1->end(); it++) {
 		newNodeLabel->insert((*it)->begin(), (*it)->end());
 		delete *it;
 	}
 	newNodeLabel->rightParenthesis();
 
-	delete minv;
+	delete minv1;
 	vertexSet.clear();
 	vertexSet.insert(a);
 	adjSet[a].clear();
 	nodeLabelSet[a].clear();
 	nodeLabelSet[a].push_back(newNodeLabel);
 	return true;
+}
+
+std::vector<Label*>* SPGRepresentation::findMinInLoop(std::vector<Label*> *t, int n) {
+	int cnt = 0;
+	std::vector<Label*> *minv = new std::vector<Label*>(t->begin(), t->end());
+	Label *l1=NULL, *l2=NULL;
+	while (cnt < n-1) {
+		l1 = *(t->begin()), l2 = *(t->begin()+1);
+		for (std::vector<Label*>::iterator it = t->begin();
+				it+2 != t->end(); it += 2) {
+			*it = *(it+2);
+			*(it+1) = *(it+3);
+		}
+		*(t->rbegin()+1) = l1;
+		*(t->rbegin()) = l2;
+
+		if (!SPGRepresentation::comparisonOfTwoVector(minv, t)) {
+			delete minv;
+			minv = new std::vector<Label*>(t->begin(), t->end());
+		}
+		cnt++;
+	}
+	return minv;
 }
 
 std::vector<Label*> *SPGRepresentation::loopLabelGenerator(int a, int b) {
@@ -569,13 +596,33 @@ bool SPGRepresentation::equivalenceOfTwoVector(
 	return SPGRepresentation::comparisonOfTwoVector(lhs, rhs) && SPGRepresentation::comparisonOfTwoVector(rhs, lhs);
 }
 
-void SPGRepresentation::iteration() {
+void SPGRepresentation::computation() {
 	while (vertexSet.size() > 1 ||
 			nodeLabelSet[*vertexSet.begin()].size() > 1) 
 		if (rule0_1() || rule0_2() ||
 				rule1_1() || rule1_2() || rule2_1()) {;}
 
 	this->rpr = *nodeLabelSet[*vertexSet.begin()].begin();
+}
+
+void SPGRepresentation::clearNode(int n) {
+	vertexSet.erase(n);
+	for (std::set<int>::iterator it = adjSet[n].begin();
+			it != adjSet[n].end(); it++) {
+		adjSet[*it].erase(n);
+	}
+	adjSet[n].clear();
+	for (std::vector<Label*>::iterator it = nodeLabelSet[n].begin(); it != nodeLabelSet[n].end(); it++) {
+		delete *it;
+	}
+	nodeLabelSet[n].clear();
+}
+
+void SPGRepresentation::clearEdge(std::set<int> &e) {
+	for (std::vector<Label*>::iterator it = edgeLabelSet[e].begin(); it != edgeLabelSet[e].end(); it++) {
+		delete *it;
+	}
+	edgeLabelSet[e].clear();
 }
 
 /*
@@ -664,6 +711,15 @@ void SPGRepresentation::display() {
 	}
 }
 
+void SPGRepresentation::printRepresentation() {
+	if(rpr)  {
+		std::cout << "FINAL REPRESENTATION:" << std::endl;
+		rpr->printReadable(); 
+	} else {
+		std::cout << "NO REPRESENTATION AVAILABLE" << std::endl;
+	}
+}
+
 void testRule(SPGRepresentation &rpr, int ruleNO, std::string srNO) {
 	std::cout << "BEFORE RULE " << srNO << std::endl;
 	rpr.display();
@@ -688,6 +744,7 @@ void rprCaseTest() {
 	// 3: rule 1.2
 	// 4: rule 1.2, 0.1, 2.2 
 	// 5: rule 2.1, 0.2, 1.1
+	// 6: rule 2.1, 0.1
 	std::string json[] = {"{\"bond\": {"
 		"\"aid2\":[1,1],"
 		"\"aid1\":[2,2] "
@@ -710,17 +767,22 @@ void rprCaseTest() {
 		"\"aid2\":[1,1,1,1,2,4],"
 		"\"aid1\":[2,3,4,5,3,5] "
 		"}}","{\"bond\": {"
+		"\"aid2\":[2,2,2,2,1,4],"
+		"\"aid1\":[1,3,4,5,3,5] "
+		"}}","{\"bond\": {"
 		"\"aid2\":[1,2,2,3,4,5,5,6,7,8,9,9,10,11,12,12,13,13,14],"
 		"\"aid1\":[13,13,14,14,15,6,15,7,15,12,10,12,11,12,13,15,14,15,15]"
 		"}}"};
-	d.Parse(json[7].c_str());
+	d.Parse(json[4].c_str());
 
-	SPGRepresentation frpr = SPGRepresentation(d);
-	frpr.iteration();
-	frpr.printRepresentation();
+	SPGRepresentation rpr = SPGRepresentation(d);
+	rpr.computation();
+	std::cout << rpr.hashValue() << std::endl;
 }
 
+/*
 int main(int argc, char **argv) {
 	//labelCaseTest();
 	rprCaseTest();
 }
+*/

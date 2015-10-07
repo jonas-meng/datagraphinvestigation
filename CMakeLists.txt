@@ -1,5 +1,0 @@
-project (spg C CXX)
-cmake_minimum_required(VERSION 2.8.4)
-find_package (Threads REQUIRED)
-add_executable(spg spg.cpp)
-target_link_libraries (spg ${CMAKE_THREAD_LIBS_INIT})
