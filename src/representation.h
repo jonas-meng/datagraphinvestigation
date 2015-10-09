@@ -16,13 +16,32 @@ class Label {
 	 * Adopted encoding schema:
 	 * |character|encoding|
 	 * |:-------:|:------:|
-	 * |)|00|
-	 * |0|01|
-	 * |(|10|
+	 * |) |000|
+	 * |-1|001|
+	 * |0 |010|
+	 * |+1|011|
+	 * |( |100|
 	 * */
 	private:
 		std::vector<bool> v;
 		std::hash<std::vector<bool> > hasher;
+
+		struct symbol {
+			bool notation; // 0 denotes node while 1 denotes edge
+			int ruleNO;
+			std::vector<symbol*> components;
+
+			~symbol() {
+				for (std::vector<symbol*>::iterator it = components.begin(); it!= components.end(); it++) {
+					delete (*it);
+				}
+			}
+		};
+
+		std::vector<bool>::iterator walker;
+		std::map<int, std::set<int> > adjSet;
+		int nodeCounter;
+		symbol *ps;
 
 	public:
 		static bool comparison(Label* lhs, Label* rhs) { return *lhs < *rhs; }
@@ -32,9 +51,47 @@ class Label {
 		Label(bool) { initialNodeLabel(); }
 		Label(bool, bool) { initialEdgeLabel(); }
 
-		void rightParenthesis() { v.push_back(0); v.push_back(0); } // encoding for ')' is 00
-		void zero() { v.push_back(0); v.push_back(1); } // encoding for '0' is 01
-		void leftParenthesis() { v.push_back(1); v.push_back(0); } // encoding for '(' is 10
+		int readOneChar() {
+			if (walker+2 != v.end()) {
+				return *(walker++) * 4 + *(walker++) * 2 + *(walker++);
+			} else {
+				return -1;
+			}
+		}
+
+		int readOneChar(std::vector<bool>::iterator it) {
+			if (it+2 != v.end()) {
+				return *(it++) * 4 + *(it++) * 2 + *(it++);
+			} else {
+				return -1;
+			}
+		}
+
+		void rightParenthesis() { 
+			v.push_back(0); 
+			v.push_back(0); 
+			v.push_back(0); 
+		} // encoding for ')' is 000
+		void negativeOne() { 
+			v.push_back(0); 
+			v.push_back(0); 
+			v.push_back(1); 
+		} // encoding for ')' is 001
+		void zero() { 
+			v.push_back(0); 
+			v.push_back(1); 
+			v.push_back(0); 
+		} // encoding for '0' is 010
+		void positiveOne() { 
+			v.push_back(0); 
+			v.push_back(1); 
+			v.push_back(1); 
+		} // encoding for '0' is 011
+		void leftParenthesis() { 
+			v.push_back(1); 
+			v.push_back(0); 
+			v.push_back(0); 
+		} // encoding for '(' is 100
 
 		void insert(std::vector<bool>::iterator first,
 				std::vector<bool>::iterator last) { 
@@ -57,9 +114,18 @@ class Label {
 		}
 
 		void printReadable();
+		void displayAdjSet();
 		size_t hashValue() {
 			return hasher(v);
 		}
+		std::map<int, std::set<int> > &getAdjSet() { return adjSet; }
+
+		void parseRepresentation();
+		symbol *recursivePaser();
+		void determineSymbolNotation(symbol *);
+		void reconstruct();
+		void nodeReconstruct(int, symbol*);
+		void edgeReconstruct(int, int, symbol*);
 		void unpack();
 		
 		bool operator<(Label &rhs);
@@ -91,19 +157,18 @@ class SPGRepresentation {
 		void initialization(rapidjson::Document &);
 		void initializeNodeLabel();
 		void initializeEdgeLabel(int, int);
-		bool rule0_1();
-		bool rule0_2();
-		bool rule1_1();
-		bool rule1_2();
-		bool rule1_3(Label*, int);
-		bool rule2_1();
-		bool rule2_2(std::set<int> &);
 		void computation();
+
 		void display(); // display current state including nodelabelset, edgelabelset, and vertexset
+		void displayAdjSet();
+		void displayLabelOfNode();
+		void displayLabelOfEdge();
 		void printRepresentation();
+
 		size_t hashValue() {
 			return rpr->hashValue();			
 		}
+		void unpack() { if(rpr) rpr->unpack(); adjSet = rpr->getAdjSet(); }
 
 		bool operator==(SPGRepresentation &rhs);
 		bool operator<(SPGRepresentation &rhs);
@@ -115,7 +180,14 @@ class SPGRepresentation {
 		std::vector<Label*>* findMinInLoop(std::vector<Label*>*,int n);
 		void clearNode(int n);
 		void clearEdge(std::set<int> &e);
-
+		bool rule0_1();
+		bool rule0_2();
+		bool rule1_1();
+		bool rule1_2();
+		bool rule1_3(Label*, int);
+		bool rule2_1();
+		bool rule2_2(std::set<int> &);
+	
 };
 
 #endif

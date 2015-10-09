@@ -36,6 +36,20 @@ void Label::printReadable() {
 	std::cout << std::endl;
 }
 
+void Label::displayAdjSet() {
+	std::cout << "--------------------------" << std::endl;
+	std::cout << "Vertex set:" << std::endl;
+	for (std::map<int, std::set<int> >::iterator it = adjSet.begin(); it != adjSet.end(); it++) {
+		std::cout << it->first << ": ";
+
+		for (std::set<int>::iterator vit = it->second.begin();
+				vit != it->second.end(); vit++) {
+			std::cout << *vit << ",";
+		}
+		std::cout << std::endl;
+	}
+}
+
 bool Label::operator<(Label &rhs) {
 	// NOTICE: by default left hand side is smaller for a case of equivalence
 	std::vector<bool>::iterator it1 = v.begin();
@@ -50,6 +64,187 @@ bool Label::operator<(Label &rhs) {
 
 bool Label::operator==(Label &rhs) {
 	return ((*this) < rhs && rhs < (*this));
+}
+
+void Label::unpack() {
+	parseRepresentation();
+	reconstruct();
+	delete ps;
+}
+
+void Label::reconstruct() {
+	nodeCounter = 0;	
+	nodeReconstruct(++nodeCounter, ps);
+}
+
+void Label::nodeReconstruct(int number, symbol *s) {
+	if (s->ruleNO != -1) {
+		int t;
+		if (s->ruleNO == 1) {
+			for (std::vector<symbol*>::iterator it = s->components.begin(); it != s->components.end(); it++) {
+				nodeReconstruct(number, *it);	
+			}
+#ifdef DEBUG
+			std::cout << "RULE 0.1 UNPACK" << std::endl;
+			displayAdjSet();
+#endif
+		} else if (s->ruleNO == 11) {
+			t = ++nodeCounter;
+			std::vector<symbol*>::iterator it = s->components.begin();
+			nodeReconstruct(number, *it);
+			edgeReconstruct(number, t, *(it+1));
+			nodeReconstruct(t, *(it+2));
+#ifdef DEBUG
+			std::cout << "RULE 1.1 UNPACK" << std::endl;
+			displayAdjSet();
+#endif
+		} else if (s->ruleNO == 12) {
+			t = ++nodeCounter;	
+
+			edgeReconstruct(number, t, *(s->components.begin()));
+			nodeReconstruct(t, *(s->components.rbegin()));	
+#ifdef DEBUG
+			std::cout << "RULE 1.2 UNPACK" << std::endl;
+			displayAdjSet();
+#endif
+		} else if (s->ruleNO == 13) {
+			edgeReconstruct(number, number, *(s->components.begin()));
+#ifdef DEBUG
+			std::cout << "RULE 1.3 UNPACK" << std::endl;
+			displayAdjSet();
+#endif
+		} else if (s->ruleNO == 22) {
+			int t1 = number, t2;
+			std::vector<symbol*>::iterator it = s->components.begin();
+			for (; (it+2) != s->components.end();) { 
+				t2 = ++nodeCounter;
+				
+				edgeReconstruct(t1, t2, *(it++));
+				nodeReconstruct(t2, *(it++));
+				t1 = t2;
+			}
+			t2 = number;
+			
+			edgeReconstruct(t1, t2, *(it++));
+			nodeReconstruct(t2, *(it++));
+#ifdef DEBUG
+			std::cout << "RULE 2.2 UNPACK" << std::endl;
+			displayAdjSet();
+#endif
+		} else {
+			std::cerr << "WRONG RULE NUMBER FOR NODE:" << s->ruleNO << std::endl;
+		}
+
+	}
+}
+
+void Label::edgeReconstruct(int a, int b, symbol *s) {
+	if (s->ruleNO != -1) {
+		if (s->ruleNO == 2) {
+			for (std::vector<symbol*>::iterator it = s->components.begin(); it != s->components.end(); it++) { 
+				edgeReconstruct(a, b, *it);
+			}
+#ifdef DEBUG
+			std::cout << "RULE 0.2 UNPACK" << std::endl;
+			displayAdjSet();
+#endif
+		} else if (s->ruleNO == 21) {
+			int t1 = a, t2;
+			std::vector<symbol*>::iterator it = s->components.begin();
+			for (; (it+1) != s->components.end();) { 
+				t2 = ++nodeCounter;
+				edgeReconstruct(t1, t2, *(it++));
+				nodeReconstruct(t2, *(it++));
+				t1 = t2;
+			}
+			t2 = b;
+			edgeReconstruct(t1, t2, *(it++));
+#ifdef DEBUG
+			std::cout << "RULE 2.1 UNPACK" << std::endl;
+			displayAdjSet();
+#endif
+		} else {
+			std::cerr << "WRONG RULE NUMBER FOR EDGE:" << s->ruleNO << std::endl;
+		}
+	} else {
+		adjSet[a].insert(b);
+		adjSet[b].insert(a);
+	}
+}
+
+void Label::parseRepresentation() {
+	/*
+	 * |)|00|0
+	 * |0|01|1
+	 * |(|10|2
+	 * */
+	walker = v.begin();
+	readOneChar(); // read first left parenthesis
+	ps = recursivePaser();
+}
+
+Label::symbol *Label::recursivePaser() {
+	int c;
+	Label::symbol *s = new symbol();
+	while (true) { // end of label
+		c = readOneChar();
+		if (c == 2) { // start of label
+			s->components.push_back(recursivePaser());
+		} else if (c == 1) { // possible simple node or edge
+			c = readOneChar();
+			if (c == 0) { // simple node
+				s->notation = 0;
+				s->ruleNO = -1;
+			} else if (c == 1) { // simple edge
+				s->notation = 1;	
+				s->ruleNO = -1;
+				readOneChar(); // read right parenthesis
+			} else {
+				std::cerr << "UNEXPECTED END OF REPRESENTATION" << std::endl;
+			}
+			return s;
+		} else if (c == 0) {
+			break;
+		} else {
+			std::cerr << "UNEXPECTED END OF REPRESENTATION" << std::endl;
+		}
+	}	
+	determineSymbolNotation(s);
+	return s;
+}
+
+void Label::determineSymbolNotation(symbol *s) {
+	int noe = 0, non = 0, first, last;
+	first = (*(s->components).begin())->notation;
+	last = (*(s->components).rbegin())->notation;
+	for (std::vector<symbol*>::iterator it = s->components.begin(); it != s->components.end(); it++) {
+		if ((*it)->notation == 0) non++;
+		else noe++;
+	}
+	if (noe == 0) {
+		s->notation = 0;
+		s->ruleNO = 1;
+	} else if ((non == 0 && noe == 1)) {
+		s->notation = 0;
+		s->ruleNO = 13;
+	} else if ((non == 1 && noe == 1 && first == 1 && last == 0)) {
+		s->notation = 0;
+		s->ruleNO = 12;
+	} else if ((non == noe + 1)) {
+		s->notation = 0;
+		s->ruleNO = 11;
+	} else if ((non == 0)) {
+		s->notation = 1;
+		s->ruleNO = 2;
+	} else if (noe == non + 1) {
+		s->notation = 1;
+		s->ruleNO = 21;
+	} else if (non == noe) {
+		s->notation = 0;
+		s->ruleNO = 22;
+	} else {
+		std::cerr << "WRONG COMPOSITION OF NOTATION" << std::endl;
+	}
 }
 
 SPGRepresentation::SPGRepresentation(rapidjson::Document &d) {
@@ -560,6 +755,8 @@ std::vector<Label*> *SPGRepresentation::loopLabelGenerator(int a, int b) {
 #endif
 		t->push_back(*edgeLabelSet[edge].begin());
 		t->push_back(*nodeLabelSet[a].begin());
+		edgeLabelSet[edge].clear();
+		nodeLabelSet[a].clear();
 
 		visited.insert(b);
 		c = b;
@@ -580,6 +777,8 @@ std::vector<Label*> *SPGRepresentation::loopLabelGenerator(int a, int b) {
 
 	t->push_back(*edgeLabelSet[edge].begin());
 	t->push_back(*nodeLabelSet[a].begin());
+	edgeLabelSet[edge].clear();
+	nodeLabelSet[a].clear();
 
 	return t;
 }
@@ -679,32 +878,35 @@ void labelCaseTest() {
 	}
 }
 
-void SPGRepresentation::display() {
-	std::cout << "Vertex set:";
-	for (std::set<int>::iterator it = vertexSet.begin();
-			it != vertexSet.end(); it++) {
-		std::cout << *it << ": ";
+void SPGRepresentation::displayAdjSet() {
+	std::cout << "--------------------------" << std::endl;
+	std::cout << "Vertex set:" << std::endl;
+	for (std::map<int, std::set<int> >::iterator it = adjSet.begin(); it != adjSet.end(); it++) {
+		std::cout << it->first << ": ";
 
-		for (std::set<int>::iterator vit = adjSet[*it].begin();
-				vit != adjSet[*it].end(); vit++) {
+		for (std::set<int>::iterator vit = it->second.begin();
+				vit != it->second.end(); vit++) {
 			std::cout << *vit << ",";
 		}
 		std::cout << std::endl;
 	}
+}
 
+void SPGRepresentation::displayLabelOfNode() {
 	std::cout << "--------------------------" << std::endl;
 	
 	std::cout << "labels of node:" << std::endl;
-	for (std::map<int, std::vector<Label*> >::iterator
-			it = nodeLabelSet.begin(); it != nodeLabelSet.end();
-			it++) {
-		std::cout << it->first << ": {" << std::endl;
-		for (std::vector<Label*>::iterator vit = it->second.begin(); vit != it->second.end(); vit++) {
+	for (std::set<int>::iterator it = vertexSet.begin();
+			it != vertexSet.end(); it++) {
+		std::cout << *it << ": {" << std::endl;
+		for (std::vector<Label*>::iterator vit = nodeLabelSet[*it].begin(); vit != nodeLabelSet[*it].end(); vit++) {
 			(*vit)->printReadable();
 		}
 		std::cout << "}" << std::endl;
 	}
+}
 
+void SPGRepresentation::displayLabelOfEdge() {
 	std::cout << "--------------------------" << std::endl;
 
 	std::cout << "labels of edge:" << std::endl;
@@ -718,6 +920,12 @@ void SPGRepresentation::display() {
 	}
 }
 
+void SPGRepresentation::display() {
+	displayAdjSet();
+	displayLabelOfNode();
+	displayLabelOfEdge();
+}
+
 void SPGRepresentation::printRepresentation() {
 	if(rpr)  {
 		std::cout << "FINAL REPRESENTATION:" << std::endl;
@@ -725,22 +933,6 @@ void SPGRepresentation::printRepresentation() {
 	} else {
 		std::cout << "NO REPRESENTATION AVAILABLE" << std::endl;
 	}
-}
-
-void testRule(SPGRepresentation &rpr, int ruleNO, std::string srNO) {
-	std::cout << "BEFORE RULE " << srNO << std::endl;
-	rpr.display();
-	switch(ruleNO) {
-		case 0: rpr.rule0_1(); break;
-		case 1: rpr.rule0_2(); break;
-		case 2: rpr.rule1_1(); break;
-		case 3: rpr.rule1_2(); break;
-		case 4: rpr.rule1_3(); break;
-		case 5: rpr.rule2_1(); break;
-		default: break;
-	}
-	std::cout << "AFTER RULE " << srNO<< std::endl;
-	rpr.display();
 }
 
 void rprCaseTest() {
@@ -752,7 +944,8 @@ void rprCaseTest() {
 	// 4: rule 1.2, 0.1, 2.2 
 	// 5: rule 2.1, 0.2, 1.1
 	// 6: rule 2.1, 0.1
-	std::string json[] = {"{\"bond\": {"
+	std::string json[] = {
+		"{\"bond\": {"
 		"\"aid2\":[1,1],"
 		"\"aid1\":[2,2] "
 		"}}","{\"bond\": {"
@@ -779,17 +972,29 @@ void rprCaseTest() {
 		"}}","{\"bond\": {"
 		"\"aid2\":[1,2,2,3,4,5,5,6,7,8,9,9,10,11,12,12,13,13,14],"
 		"\"aid1\":[13,13,14,14,15,6,15,7,15,12,10,12,11,12,13,15,14,15,15]"
+		"}}","{\"bond\": {"
+		"\"aid2\":[1,1,1,1,2,2,2,2,2,2,4,4,7,7,7,9,10,13,14],"
+		"\"aid1\":[2,3,4,7,4,6,7,12,13,15,5,6,8,9,11,10,11,14,15]"
 		"}}"};
-	d.Parse(json[4].c_str());
+	d.Parse(json[8].c_str());
 
 	SPGRepresentation rpr = SPGRepresentation(d);
 	rpr.computation();
-	std::cout << rpr.hashValue() << std::endl;
+
+	d.Parse(json[9].c_str());
+	SPGRepresentation frpr = SPGRepresentation(d);
+	frpr.computation();
+
+	if (frpr.hashValue() == rpr.hashValue()) {
+		std::cout << "WRONG REPRESENTATION" << std::endl;
+	} else {
+		std::cout << "WRONG CONSTRUCTION" << std::endl;
+	}
+	//rpr.unpack();
+	//rpr.displayAdjSet();
 }
 
-/*
 int main(int argc, char **argv) {
 	//labelCaseTest();
 	rprCaseTest();
 }
-*/
