@@ -16,19 +16,21 @@
 void Label::printReadable() {
 	short n;
 	short precedent = -1;
-	std::vector<bool>::iterator it = v.begin();
-	while (it != v.end()) {
-		n = 0;
-		n = (n << 1) + *it; it++;
-		n = (n << 1) + *it; it++;
-		if ((precedent == 1 && n == 1) ||
-				(precedent == 0 && n == 2)) {
-			std::cout << ',';
+	walker = v.begin();
+	while ((n = readOneChar()) != -1) {
+		if (((n > 0 && n < 4) && 
+					(precedent >= 0 && precedent < 4)) ||
+				((precedent > 0 && precedent < 4) &&
+				 n == 4) ||
+				(precedent == 0 && n == 4)) {
+			std::cout << ",";
 		}
 		switch(n) {
 			case 0: std::cout << ')'; break;
-			case 1: std::cout << '0'; break;
-			case 2: std::cout << '('; break;
+			case 1: std::cout << "-1"; break;
+			case 2: std::cout << '0'; break;
+			case 3: std::cout << "+1"; break;
+			case 4: std::cout << '('; break;
 			default: break;
 		}
 		precedent = n;
@@ -92,7 +94,11 @@ void Label::nodeReconstruct(int number, symbol *s) {
 			t = ++nodeCounter;
 			std::vector<symbol*>::iterator it = s->components.begin();
 			nodeReconstruct(number, *it);
-			edgeReconstruct(number, t, *(it+1));
+			if ((*(it+1))->orientation == -1) {
+				edgeReconstruct(t, number, *(it+1));
+			} else {
+				edgeReconstruct(number, t, *(it+1));
+			}
 			nodeReconstruct(t, *(it+2));
 #ifdef DEBUG
 			std::cout << "RULE 1.1 UNPACK" << std::endl;
@@ -101,7 +107,12 @@ void Label::nodeReconstruct(int number, symbol *s) {
 		} else if (s->ruleNO == 12) {
 			t = ++nodeCounter;	
 
-			edgeReconstruct(number, t, *(s->components.begin()));
+			if ((*s->components.begin())->orientation == -1) {
+				edgeReconstruct(t, number, *(s->components.begin()));
+			} else {
+				edgeReconstruct(number, t, *(s->components.begin()));
+
+			}
 			nodeReconstruct(t, *(s->components.rbegin()));	
 #ifdef DEBUG
 			std::cout << "RULE 1.2 UNPACK" << std::endl;
@@ -119,13 +130,21 @@ void Label::nodeReconstruct(int number, symbol *s) {
 			for (; (it+2) != s->components.end();) { 
 				t2 = ++nodeCounter;
 				
-				edgeReconstruct(t1, t2, *(it++));
+				if ((*it)->orientation == -1) {
+					edgeReconstruct(t2, t1, *(it++));
+				} else {
+					edgeReconstruct(t1, t2, *(it++));
+				}
 				nodeReconstruct(t2, *(it++));
 				t1 = t2;
 			}
 			t2 = number;
 			
-			edgeReconstruct(t1, t2, *(it++));
+			if ((*it)->orientation == -1) {
+				edgeReconstruct(t2, t1, *(it++));
+			} else {
+				edgeReconstruct(t1, t2, *(it++));
+			}
 			nodeReconstruct(t2, *(it++));
 #ifdef DEBUG
 			std::cout << "RULE 2.2 UNPACK" << std::endl;
@@ -142,7 +161,11 @@ void Label::edgeReconstruct(int a, int b, symbol *s) {
 	if (s->ruleNO != -1) {
 		if (s->ruleNO == 2) {
 			for (std::vector<symbol*>::iterator it = s->components.begin(); it != s->components.end(); it++) { 
-				edgeReconstruct(a, b, *it);
+				if ((*it)->orientation == -1) {
+					edgeReconstruct(b, a, *it);
+				} else {
+					edgeReconstruct(a, b, *it);
+				}
 			}
 #ifdef DEBUG
 			std::cout << "RULE 0.2 UNPACK" << std::endl;
@@ -153,12 +176,20 @@ void Label::edgeReconstruct(int a, int b, symbol *s) {
 			std::vector<symbol*>::iterator it = s->components.begin();
 			for (; (it+1) != s->components.end();) { 
 				t2 = ++nodeCounter;
-				edgeReconstruct(t1, t2, *(it++));
+				if ((*it)->orientation == -1) {
+					edgeReconstruct(t2, t1, *(it++));
+				} else {
+					edgeReconstruct(t1, t2, *(it++));
+				}
 				nodeReconstruct(t2, *(it++));
 				t1 = t2;
 			}
 			t2 = b;
-			edgeReconstruct(t1, t2, *(it++));
+			if ((*it)->orientation == -1) {
+				edgeReconstruct(t2, t1, *(it++));
+			} else {
+				edgeReconstruct(t1, t2, *(it++));
+			}
 #ifdef DEBUG
 			std::cout << "RULE 2.1 UNPACK" << std::endl;
 			displayAdjSet();
@@ -174,9 +205,16 @@ void Label::edgeReconstruct(int a, int b, symbol *s) {
 
 void Label::parseRepresentation() {
 	/*
-	 * |)|00|0
-	 * |0|01|1
-	 * |(|10|2
+	 * Rule number is neglected since we are not interested in rebuilding original graph based on final representation
+	 *
+	 * Adopted encoding schema:
+	 * |character|encoding|
+	 * |:-------:|:------:|
+	 * |) |000|0
+	 * |-1|001|1
+	 * |0 |010|2
+	 * |+1|011|3
+	 * |( |100|4
 	 * */
 	walker = v.begin();
 	readOneChar(); // read first left parenthesis
@@ -184,32 +222,53 @@ void Label::parseRepresentation() {
 }
 
 Label::symbol *Label::recursivePaser() {
-	int c;
-	Label::symbol *s = new symbol();
+	int c, n;
+	Label::symbol *s = new symbol(), *t;
+	std::vector<bool>::iterator beg = walker;
 	while (true) { // end of label
 		c = readOneChar();
-		if (c == 2) { // start of label
-			s->components.push_back(recursivePaser());
-		} else if (c == 1) { // possible simple node or edge
+		if (c == 4) { // start of label
+			t = recursivePaser();
+			s->components.push_back(t);
+		} else if (c == 2) { // possible simple node or edge
 			c = readOneChar();
 			if (c == 0) { // simple node
 				s->notation = 0;
 				s->ruleNO = -1;
-			} else if (c == 1) { // simple edge
+				s->orientation = 0;
+			} else if (c == 2) { // simple edge
 				s->notation = 1;	
 				s->ruleNO = -1;
-				readOneChar(); // read right parenthesis
+				s->orientation = 0;
+				c = readOneChar(); // read right parenthesis
 			} else {
 				std::cerr << "UNEXPECTED END OF REPRESENTATION" << std::endl;
 			}
 			return s;
 		} else if (c == 0) {
 			break;
+		} else if (c >0 && c < 4) {
+			// orientation of edge	
+			s->orientation = c;	
+
 		} else {
 			std::cerr << "UNEXPECTED END OF REPRESENTATION" << std::endl;
 		}
 	}	
+	std::vector<bool>::iterator end = walker;
+	for (; beg != end; beg+= 3) {
+		c = readOneChar(beg);
+		switch(c) {
+			case 0: std::cout << ")"; break;
+			case 1: std::cout << "-1"; break;
+			case 2: std::cout << "0"; break;
+			case 3: std::cout << "+1"; break;
+			case 4: std::cout << "("; break;
+		}
+	}
 	determineSymbolNotation(s);
+	std::cout  << " " << s->ruleNO <<  " " << s->orientation << " " << s->notation << std::endl;
+
 	return s;
 }
 
@@ -310,6 +369,35 @@ void SPGRepresentation::initializeNodeLabel() {
 	}
 }
 
+void SPGRepresentation::reverseEdge(std::vector<Label*> &v) {
+	for (std::vector<Label*>::iterator
+			lit = v.begin();
+			lit != v.end();
+			lit++) {
+		(*lit)->reverseOrientation();
+	}
+}
+
+Label *SPGRepresentation::edgeLabelGenerator(std::vector<Label*> &v) {
+	Label *newLabel = new Label();
+	newLabel->leftParenthesis();
+
+	for (std::vector<Label*>::iterator
+			lit = v.begin();
+			lit != v.end();
+			lit++) {
+		newLabel->insert((*lit)->begin(),
+				(*lit)->end());
+	}
+
+	newLabel->rightParenthesis();
+	return newLabel;
+}
+
+Label *SPGRepresentation::labelGeneratorRule0_2(std::vector<Label*> &v) {
+	return edgeLabelGenerator(v);
+}
+
 bool SPGRepresentation::rule0_1() {
 	bool res = false;
 	std::vector<int> nodeWithMultiLabel;
@@ -359,6 +447,10 @@ bool SPGRepresentation::rule0_1() {
 
 			newNodeLabel->rightParenthesis();
 
+#ifdef DEBUG0_1
+			newNodeLabel->printReadable();
+#endif
+
 			nodeLabelSet[*it].clear();
 			nodeLabelSet[*it].push_back(newNodeLabel);
 		}
@@ -402,20 +494,43 @@ bool SPGRepresentation::rule0_2() {
 			std::sort(edgeLabelSet[*it].begin(),
 					edgeLabelSet[*it].end(),
 					Label::comparison);
+			Label *newEdgeLabel1 = labelGeneratorRule0_2(edgeLabelSet[*it]);
+
+			reverseEdge(edgeLabelSet[*it]);
+
+			std::sort(edgeLabelSet[*it].begin(),
+					edgeLabelSet[*it].end(),
+					Label::comparison);
+			Label *newEdgeLabel2 = labelGeneratorRule0_2(edgeLabelSet[*it]);
 
 			Label *newEdgeLabel = new Label();
 			newEdgeLabel->leftParenthesis();
+			if (Label::comparison(newEdgeLabel1, newEdgeLabel2)) {
+				newEdgeLabel->insert(newEdgeLabel1->begin(), newEdgeLabel1->end());
+				if (Label::comparison(newEdgeLabel2, newEdgeLabel1)) {
+					newEdgeLabel->zero();
+				} else {
+					newEdgeLabel->positiveOne();
+				}
+			} else {
+				newEdgeLabel->insert(newEdgeLabel2->begin(),
+						newEdgeLabel2->end());
+				newEdgeLabel->negativeOne();
+			}
+			newEdgeLabel->rightParenthesis();
+
+			delete newEdgeLabel1;
+			delete newEdgeLabel2;
 
 			for (std::vector<Label*>::iterator
 					lit = edgeLabelSet[*it].begin();
 					lit != edgeLabelSet[*it].end();
 					lit++) {
-				newEdgeLabel->insert((*lit)->begin(),
-						(*lit)->end());
 				delete (*lit);
 			}
-
-			newEdgeLabel->rightParenthesis();
+#ifdef DEBUG0_2
+			newEdgeLabel->printReadable();
+#endif
 
 			edgeLabelSet[*it].clear();
 			edgeLabelSet[*it].push_back(newEdgeLabel);
@@ -423,6 +538,24 @@ bool SPGRepresentation::rule0_2() {
 	}
 
 	return res;
+}
+
+Label *SPGRepresentation::labelGeneratorRule1_1(int a, std::set<int> &edge, int b) {
+	Label *newNodeLabel = new Label(), *t;
+	newNodeLabel->leftParenthesis();
+
+	t = *nodeLabelSet[a].begin();
+	newNodeLabel->insert(t->begin(), t->end());
+
+	t = *edgeLabelSet[edge].begin();
+	newNodeLabel->insert(t->begin(), t->end());
+
+	t = *nodeLabelSet[b].begin();
+	newNodeLabel->insert(t->begin(), t->end());
+
+	newNodeLabel->rightParenthesis();
+
+	return newNodeLabel;
 }
 
 bool SPGRepresentation::rule1_1() {
@@ -439,30 +572,34 @@ bool SPGRepresentation::rule1_1() {
 		edge.insert(a);
 		edge.insert(b);
 
-		if (Label::comparison(*nodeLabelSet[b].begin(), 
-					*nodeLabelSet[a].begin())) {
+		if (a > b) {
 			c = a; a = b; b = c;
 		}
+
+		Label *newLabel1, *newLabel2;
+		newLabel1 = labelGeneratorRule1_1(a, edge, b);	
+		(*edgeLabelSet[edge].begin())->reverseOrientation();
+		newLabel2 = labelGeneratorRule1_1(b, edge, a);	
 
 #ifdef DEBUG1_1
 	std::cout << a << ",(" << a << "," << b << "),"<< b << std::endl;
 #endif
-		newNodeLabel->leftParenthesis();
-		t = *nodeLabelSet[a].begin();
-		newNodeLabel->insert(t->begin(), t->end());
-		delete t;
-		nodeLabelSet[a].clear();
-		t = *edgeLabelSet[edge].begin();
-		newNodeLabel->insert(t->begin(), t->end());
-		delete t;
-		edgeLabelSet[edge].clear();
-		t = *nodeLabelSet[b].begin();
-		newNodeLabel->insert(t->begin(), t->end());
-		delete t;
-		nodeLabelSet[b].clear();
-		newNodeLabel->rightParenthesis();
+		if (Label::comparison(newLabel1, newLabel2)) {
+			newNodeLabel = newLabel1;
+			delete newLabel2;
+		} else {
+			newNodeLabel = newLabel2;
+			delete newLabel1;
+		}
 
-		vertexSet.erase(b);
+		clearNode(a);
+		clearNode(b);
+		clearEdge(edge);
+#ifdef DEBUG1_1
+		newNodeLabel->printReadable();
+#endif
+
+		vertexSet.insert(a);
 		nodeLabelSet[a].push_back(newNodeLabel);
 	}	
 
@@ -513,22 +650,26 @@ bool SPGRepresentation::rule1_2() {
 
 		newNodeLabel->leftParenthesis();
 		// edge
+		if (a < *it) {
+			(*edgeLabelSet[edge].begin())->reverseOrientation();
+		}
+
 		t = *edgeLabelSet[edge].begin();
 		newNodeLabel->insert(t->begin(), t->end());
-		delete t;
-		edgeLabelSet[edge].clear();
 		// node
 		t = *nodeLabelSet[*it].begin();
 		newNodeLabel->insert(t->begin(), t->end());
-		delete t;
-		nodeLabelSet[*it].clear();
 
 		newNodeLabel->rightParenthesis();
 
 		// maintain consistent state
+		clearNode(*it);
+		clearEdge(edge);
+#ifdef DEBUG1_2
+		newNodeLabel->printReadable();
+#endif
+
 		nodeLabelSet[a].push_back(newNodeLabel);
-		vertexSet.erase(*it);
-		adjSet[*it].clear();
 	}
 
 	return res;
@@ -544,6 +685,10 @@ bool SPGRepresentation::rule1_3(Label *edge, int n) {
 	nodeLabelSet[n].push_back(newNodeLabel);
 	delete edge;
 	return true;
+}
+
+Label *SPGRepresentation::labelGeneratorRule2_1(std::vector<Label*> &v) {
+	return edgeLabelGenerator(v);
 }
 
 bool SPGRepresentation::rule2_1() {
@@ -581,35 +726,79 @@ void SPGRepresentation::serialComposition(std::set<int> &vertexWithDegree2, int 
 #ifdef DEBUG2_1
 	std::cout << "---" << std::endl;
 #endif
+	// approaching one endpoint
 	int b = *adjSet[a].begin(), e1, e2;
 	std::vector<Label*> *t1, *t2;
 	t1 = new std::vector<Label*>();
 	e1 = approachEndpoint(a, b, vertexWithDegree2, t1);
 
+	for (std::vector<Label*>::iterator it = t1->begin()+1;
+			(it+1) != t1->end(); it += 2) {
+		(*it)->reverseOrientation();	
+	}
+	(*t1->rbegin())->reverseOrientation();
+
+	// approaching another endpoint
 	b = *adjSet[a].rbegin();
 	t2 = new std::vector<Label*>(t1->rbegin(), t1->rend());
 	t2->erase(t2->end()-1);
 	e2 = approachEndpoint(a, b, vertexWithDegree2, t2);	
 
-	delete t1;
-	t1 = new std::vector<Label*>(t2->rbegin(), t2->rend());
-
-	if (!SPGRepresentation::comparisonOfTwoVector(t1, t2)) {
-		delete t1; t1 = t2;
+	Label *newLabel1, *newLabel2;
+	if (e1 < e2) {
+		newLabel1 = labelGeneratorRule2_1(*t2);
 	} else {
-		delete t2; t2 = NULL;
+		newLabel2 = labelGeneratorRule2_1(*t2);
+	}
+	delete t1;
+
+	t1 = new std::vector<Label*>(t2->rbegin(), t2->rend());
+	
+	// reverse direction of edges
+	for (std::vector<Label*>::iterator it = t1->begin();
+			(it+1) != t1->end(); it += 2) {
+		(*it)->reverseOrientation();	
+	}
+	(*t1->rbegin())->reverseOrientation();
+
+	if (e1 < e2) {
+		newLabel2 = labelGeneratorRule2_1(*t1);
+	} else {
+		newLabel1 = labelGeneratorRule2_1(*t1);
 	}
 
+	delete t2;
+
+	// create new label
 	Label *newEdgeLabel = new Label();
 	newEdgeLabel->leftParenthesis();
-	for (std::vector<Label*>::iterator it = t1->begin();
-			it != t1->end(); it++) {
-		newEdgeLabel->insert((*it)->begin(), (*it)->end());
-		delete (*it);
+	if (Label::comparison(newLabel1, newLabel2)) {
+		newEdgeLabel->insert(newLabel1->begin(),
+				newLabel1->end());	
+		if (Label::comparison(newLabel2, newLabel1)) {
+			newEdgeLabel->zero();
+		} else {
+			newEdgeLabel->positiveOne();
+		}
+	} else {
+		newEdgeLabel->insert(newLabel2->begin(),
+				newLabel2->end());
+		newEdgeLabel->negativeOne();
 	}
 	newEdgeLabel->rightParenthesis();
+#ifdef DEBUG2_1
+		newEdgeLabel->printReadable();
+#endif
 
+	// release contained labels
+	for (std::vector<Label*>::iterator it = t1->begin();
+			it != t1->end(); it++) {
+		delete (*it);
+	}
 	delete t1;
+
+	delete newLabel1;
+	delete newLabel2;
 
 	if (e1 == e2) {
 		rule1_3(newEdgeLabel, e1);
@@ -642,6 +831,9 @@ int SPGRepresentation::approachEndpoint(int a, int b, std::set<int> &vertexWithD
 		edge.clear();
 		edge.insert(a);
 		edge.insert(b);
+		if (a > b) {
+			(*edgeLabelSet[edge].begin())->reverseOrientation();
+		}
 		t->push_back(*edgeLabelSet[edge].begin());
 		edgeLabelSet[edge].clear();
 
@@ -657,6 +849,7 @@ int SPGRepresentation::approachEndpoint(int a, int b, std::set<int> &vertexWithD
 		vertexWithDegree2.erase(a);
 		vertexSet.erase(a);
 	}
+
 	edge.clear();
 	edge.insert(a);
 	edge.insert(b);
@@ -664,11 +857,18 @@ int SPGRepresentation::approachEndpoint(int a, int b, std::set<int> &vertexWithD
 		std::cout << a << "," << b << std::endl;
 #endif
 	adjSet[b].erase(a);
+	if (a > b) {
+		(*edgeLabelSet[edge].begin())->reverseOrientation();
+	}
 	t->push_back(*edgeLabelSet[edge].begin());
 	edgeLabelSet[edge].clear();
 
 	return b;
 	
+}
+
+Label *SPGRepresentation::labelGeneratorRule2_2(std::vector<Label*> &v) {
+	return edgeLabelGenerator(v);
 }
 
 bool SPGRepresentation::rule2_2(std::set<int> &vertices) {
@@ -677,36 +877,44 @@ bool SPGRepresentation::rule2_2(std::set<int> &vertices) {
 #endif
 	int a = *vertices.begin(), b;
 	std::vector<Label*> *t, *minv1, *minv2;
+	Label *minl1, *minl2;
 
 	// two different direction
 	b = *adjSet[a].begin();
 	t = loopLabelGenerator(a, b);
 	minv1 = findMinInLoop(t, vertices.size());	
+	minl1 = labelGeneratorRule2_2(*minv1);
 	delete t;
 
 	b = *adjSet[a].rbegin();
 	t = loopLabelGenerator(a, b);
 	minv2 = findMinInLoop(t, vertices.size());
+	minl2 = labelGeneratorRule2_2(*minv2);
 	delete t;
 
-	if (!SPGRepresentation::comparisonOfTwoVector(minv1, minv2)) {
+	if (!Label::comparison(minl1, minl2)) {
 		delete minv1;
+		delete minl1;
 		minv1 = minv2;
+		minl1 = minl2;
 	} else {
 		delete minv2;
+		delete minl2;
 		minv2 = NULL;
+		minl2 = NULL;
 	}
 
-	Label *newNodeLabel = new Label();
-	newNodeLabel->leftParenthesis();
+	Label *newNodeLabel = minl1;
+
 	for (std::vector<Label*>::iterator it = minv1->begin();
 			it != minv1->end(); it++) {
-		newNodeLabel->insert((*it)->begin(), (*it)->end());
-		delete *it;
+		delete (*it);
 	}
-	newNodeLabel->rightParenthesis();
-
 	delete minv1;
+
+#ifdef DEBUG2_2
+		newNodeLabel->printReadable();
+#endif
 	vertexSet.clear();
 	vertexSet.insert(a);
 	adjSet[a].clear();
@@ -753,6 +961,9 @@ std::vector<Label*> *SPGRepresentation::loopLabelGenerator(int a, int b) {
 		std::cout << "(" << a << "," << b << "),"
 			<< a << std::endl;
 #endif
+		if (a > b) {
+			(*edgeLabelSet[edge].begin())->reverseOrientation();
+		}
 		t->push_back(*edgeLabelSet[edge].begin());
 		t->push_back(*nodeLabelSet[a].begin());
 		edgeLabelSet[edge].clear();
@@ -774,6 +985,9 @@ std::vector<Label*> *SPGRepresentation::loopLabelGenerator(int a, int b) {
 		std::cout << "(" << a << "," << b << "),"
 			<< a << std::endl;
 #endif
+	if (a > b) {
+		(*edgeLabelSet[edge].begin())->reverseOrientation();
+	}
 
 	t->push_back(*edgeLabelSet[edge].begin());
 	t->push_back(*nodeLabelSet[a].begin());
@@ -935,7 +1149,7 @@ void SPGRepresentation::printRepresentation() {
 	}
 }
 
-void rprCaseTest() {
+void rprCaseTest(int n) {
 	rapidjson::Document d;
 	// 0: rule 0.2
 	// 1: rule 1.1
@@ -944,6 +1158,10 @@ void rprCaseTest() {
 	// 4: rule 1.2, 0.1, 2.2 
 	// 5: rule 2.1, 0.2, 1.1
 	// 6: rule 2.1, 0.1
+	// 7: isomorphic to 6
+	// 8: present in paper
+	// 9: slight different with 8
+	// 10: isomorphic to 8
 	std::string json[] = {
 		"{\"bond\": {"
 		"\"aid2\":[1,1],"
@@ -975,26 +1193,36 @@ void rprCaseTest() {
 		"}}","{\"bond\": {"
 		"\"aid2\":[1,1,1,1,2,2,2,2,2,2,4,4,7,7,7,9,10,13,14],"
 		"\"aid1\":[2,3,4,7,4,6,7,12,13,15,5,6,8,9,11,10,11,14,15]"
+		"}}","{\"bond\": {"
+		"\"aid2\":[1,2,2,3,4,5,5,6,7,8,9,9,10,11,12,12,12,13,14],"
+		"\"aid1\":[13,13,14,14,15,6,15,7,15,12,10,12,11,12,13,14,15,14,15]"
 		"}}"};
-	d.Parse(json[8].c_str());
+	d.Parse(json[n].c_str());
 
 	SPGRepresentation rpr = SPGRepresentation(d);
 	rpr.computation();
 
+	/*
 	d.Parse(json[9].c_str());
 	SPGRepresentation frpr = SPGRepresentation(d);
 	frpr.computation();
 
 	if (frpr.hashValue() == rpr.hashValue()) {
-		std::cout << "WRONG REPRESENTATION" << std::endl;
+		std::cout << "SAME REPRESENTATION" << std::endl;
 	} else {
 		std::cout << "WRONG CONSTRUCTION" << std::endl;
 	}
+	*/
 	//rpr.unpack();
 	//rpr.displayAdjSet();
 }
 
 int main(int argc, char **argv) {
 	//labelCaseTest();
-	rprCaseTest();
+	int a;
+	std::cout << "Graph Number: ";
+	while (std::cin>>a) {
+		rprCaseTest(a);
+		std::cout << "Graph Number: ";
+	}
 }

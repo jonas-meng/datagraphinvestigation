@@ -16,11 +16,11 @@ class Label {
 	 * Adopted encoding schema:
 	 * |character|encoding|
 	 * |:-------:|:------:|
-	 * |) |000|
-	 * |-1|001|
-	 * |0 |010|
-	 * |+1|011|
-	 * |( |100|
+	 * |) |000|0
+	 * |-1|001|1
+	 * |0 |010|2
+	 * |+1|011|3
+	 * |( |100|4
 	 * */
 	private:
 		std::vector<bool> v;
@@ -29,6 +29,7 @@ class Label {
 		struct symbol {
 			bool notation; // 0 denotes node while 1 denotes edge
 			int ruleNO;
+			int orientation;
 			std::vector<symbol*> components;
 
 			~symbol() {
@@ -52,18 +53,49 @@ class Label {
 		Label(bool, bool) { initialEdgeLabel(); }
 
 		int readOneChar() {
-			if (walker+2 != v.end()) {
-				return *(walker++) * 4 + *(walker++) * 2 + *(walker++);
-			} else {
-				return -1;
+			int res = 0;
+			for (int i = 0; i < 3; i ++) {
+				if (walker != v.end()) {
+					res = res * 2 + *(walker++);
+				} else {
+					res = -1;
+					break;
+				}	
 			}
+			return res;
 		}
 
+		void backOneChar() { walker = walker - 3; }
+
 		int readOneChar(std::vector<bool>::iterator it) {
-			if (it+2 != v.end()) {
-				return *(it++) * 4 + *(it++) * 2 + *(it++);
-			} else {
-				return -1;
+			int res = 0;
+			for (int i = 0; i < 3; i ++) {
+				if (it != v.end()) {
+					res = res * 2 + *(it++);
+				} else {
+					res = -1;
+					break;
+				}	
+			}
+			return res;
+		}
+
+		/*
+		 * NOTICE: this is a function of semantic level
+		 * which reverse edge's orientation and 
+		 * should only be used when label corresponds to edge
+		 * */
+		void reverseOrientation() {
+			std::vector<bool>::iterator it = v.end() - 6;
+			int orientation = readOneChar(it);
+			if (orientation != 2) {
+				v.erase(it, v.end());
+				if (orientation == 1) {
+					positiveOne();	
+				} else {
+					negativeOne();
+				}
+				rightParenthesis();
 			}
 		}
 
@@ -166,7 +198,11 @@ class SPGRepresentation {
 		void printRepresentation();
 
 		size_t hashValue() {
-			return rpr->hashValue();			
+			if (rpr) {
+				return rpr->hashValue();			
+			} else {
+				return 0;
+			}
 		}
 		void unpack() { if(rpr) rpr->unpack(); adjSet = rpr->getAdjSet(); }
 
@@ -180,6 +216,13 @@ class SPGRepresentation {
 		std::vector<Label*>* findMinInLoop(std::vector<Label*>*,int n);
 		void clearNode(int n);
 		void clearEdge(std::set<int> &e);
+		void reverseEdge(std::vector<Label*> &);
+		Label *edgeLabelGenerator(std::vector<Label*> &);
+		Label *labelGeneratorRule0_2(std::vector<Label*> &);
+		Label *labelGeneratorRule1_1(int, std::set<int> &,int);
+		Label *labelGeneratorRule2_1(std::vector<Label*> &);
+		Label *labelGeneratorRule2_2(std::vector<Label*> &);
+
 		bool rule0_1();
 		bool rule0_2();
 		bool rule1_1();
