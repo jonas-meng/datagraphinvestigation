@@ -8,10 +8,16 @@
 #include <set>
 #include <queue>
 
+/*
 #define DEBUG
+*/
 
 void SPGIdentifier::initialization(const char *smol) {
 	document.Parse(smol);
+	initialization(document);
+}
+
+void SPGIdentifier::initialization(rapidjson::Document &document) {
 	int length = document["bond"]["aid1"].Size();
 	int a, b;
 	for (int i = 0; i < length; i++) {
@@ -21,11 +27,22 @@ void SPGIdentifier::initialization(const char *smol) {
 		nodeSet.insert(b);
 		adjSet[a].insert(b);
 		adjSet[b].insert(a);
-	}	
+	}
 }
 
-bool SPGIdentifier::identify(const char *smol) {
-	initialization(smol);
+void SPGIdentifier::initialization(std::set<std::set<int> > &edgeSet) {
+	int a, b;
+	for (std::set<std::set<int> >::iterator it = edgeSet.begin(); it != edgeSet.end(); it++) {
+		a = *it->begin();
+		b = *it->rbegin();
+		nodeSet.insert(a);
+		nodeSet.insert(b);
+		adjSet[a].insert(b);
+		adjSet[b].insert(a);
+	}
+}
+
+bool SPGIdentifier::identify() {
 	searchv2();	
 	int mid;
 	bool isEnd = false;
@@ -120,17 +137,20 @@ void SPGIdentifier::removalv1(int a) {
 	}
 }
 
-void testCase() {
-	std::ifstream inputfile(argv[1]);
+void testCase(char *f) {
+	std::ifstream inputfile(f);
 	std::string smol;
 
 	while (getline(inputfile, smol)) {
 		SPGIdentifier spgid;	
+		spgid.initialization(smol.c_str());
 		std::cout << smol << std::endl;
-		std::cout << spgid.identify(smol.c_str()) << std::endl;
+		std::cout << spgid.identify() << std::endl;
 	}
 }
 
+/*
 int main(int argc, char** argv) {
 	testCase();
 }
+*/

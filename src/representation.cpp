@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <string>
 
+/*
 #define DEBUG
 #define DEBUG0_1
 #define DEBUG0_2
@@ -12,6 +13,7 @@
 #define DEBUG1_2
 #define DEBUG2_1
 #define DEBUG2_2
+*/
 
 void Label::printReadable() {
 	short n;
@@ -634,7 +636,6 @@ bool SPGRepresentation::rule1_2() {
 			it++) {
 
 		a = *adjSet[*it].begin();
-		//std::cout << *it << "," << a << std::endl;
 		adjSet[a].erase(*it);
 
 		edge.clear();
@@ -807,6 +808,8 @@ void SPGRepresentation::serialComposition(std::set<int> &vertexWithDegree2, int 
 		edge.insert(e1);
 		edge.insert(e2);
 		edgeLabelSet[edge].push_back(newEdgeLabel);
+		adjSet[e1].insert(e2);
+		adjSet[e2].insert(e1);
 	}
 }
 
@@ -1017,10 +1020,14 @@ bool SPGRepresentation::equivalenceOfTwoVector(
 }
 
 void SPGRepresentation::computation() {
+#ifdef DEBUG
+	std::cout << "start computation" << std::endl;
+#endif
 	while (vertexSet.size() > 1 ||
 			nodeLabelSet[*vertexSet.begin()].size() > 1) 
 		if (rule0_1() || rule0_2() ||
-				rule1_1() || rule1_2() || rule2_1()) {;}
+				rule1_1() || rule1_2() || rule2_1()) {
+		}
 
 	this->rpr = *nodeLabelSet[*vertexSet.begin()].begin();
 }
@@ -1162,6 +1169,8 @@ void rprCaseTest(int n) {
 	// 8: present in paper
 	// 9: slight different with 8
 	// 10: isomorphic to 8
+	// 11
+	// 12
 	std::string json[] = {
 		"{\"bond\": {"
 		"\"aid2\":[1,1],"
@@ -1196,11 +1205,12 @@ void rprCaseTest(int n) {
 		"}}","{\"bond\": {"
 		"\"aid2\":[1,2,2,3,4,5,5,6,7,8,9,9,10,11,12,12,12,13,14],"
 		"\"aid1\":[13,13,14,14,15,6,15,7,15,12,10,12,11,12,13,14,15,14,15]"
-		"}}"};
+		"}}", "{\"bond\":{\"aid2\": [1,1,1,2,2,2,3,3,4,4,5,5,5,6,6,6,7,7,8,8,9,9,10,10,11,11,13,17],\"aid1\": [3,4,21,7,8,22,9,23,10,20,18,19,20,15,16,17,11,15,12,24,13,25,13,19,14,16,27,18]}}"};
 	d.Parse(json[n].c_str());
 
 	SPGRepresentation rpr = SPGRepresentation(d);
 	rpr.computation();
+	rpr.printRepresentation();
 
 	/*
 	d.Parse(json[9].c_str());
@@ -1217,6 +1227,7 @@ void rprCaseTest(int n) {
 	//rpr.displayAdjSet();
 }
 
+/*
 int main(int argc, char **argv) {
 	//labelCaseTest();
 	int a;
@@ -1226,3 +1237,4 @@ int main(int argc, char **argv) {
 		std::cout << "Graph Number: ";
 	}
 }
+*/
