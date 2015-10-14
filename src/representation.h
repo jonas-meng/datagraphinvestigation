@@ -185,7 +185,7 @@ class SPGRepresentation {
 		
 		SPGRepresentation(rapidjson::Document &);
 		SPGRepresentation(std::set<std::set<int> > &);
-		~SPGRepresentation() { if (rpr) delete rpr; }
+		~SPGRepresentation() { if(rpr) { delete rpr;} }
 		void initialization(rapidjson::Document &);
 		void initializeNodeLabel();
 		void initializeEdgeLabel(int, int);

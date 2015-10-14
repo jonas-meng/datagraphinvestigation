@@ -8,6 +8,7 @@
 #include <set>
 #include <vector>
 #include <map>
+#include <functional>
 
 class SimplifiedGraph {
 	private:
@@ -17,6 +18,7 @@ class SimplifiedGraph {
 		SimplifiedGraph(std::set<std::set<int> > &pEdgeSet, size_t hashValue): edgeSet(pEdgeSet.begin(), pEdgeSet.end()), hashValue(hashValue) {} 
 
 		size_t getHashValue() { return hashValue; }
+		int getSize() { return edgeSet.size(); }
 
 		void display(int frequency) {
 			std::cout << "Hash value: " << hashValue 
@@ -50,23 +52,28 @@ class SimplifiedGraph {
 
 class Graph {
 	public:
-		std::set<int> edgeSet;
+	//	std::set<int> edgeSet;
+		std::vector<bool> edgeSet;
 		std::set<int> nodeSet;
 		std::set<std::set<int> > realEdgeSet;
 		SPGRepresentation *spgr;
+		std::hash<std::vector<bool> > hasher;
 		size_t hashValue;
+
+		void setCapacity(int n) { edgeSet.resize(n, false); }
+		size_t hashEdgeSet() {  return hasher(edgeSet); }
 	
 		void addNewEdge(std::set<int> &edge, int edgeNO) {
 			nodeSet.insert(*edge.begin());
 			nodeSet.insert(*edge.rbegin());
-			edgeSet.insert(edgeNO);
+			edgeSet[edgeNO] = true;
 			realEdgeSet.insert(edge);
 		}
 	
 		void removeEdge(std::set<int> &edge, int edgeNO) {
 			nodeSet.erase(*edge.begin());
 			nodeSet.erase(*edge.rbegin());
-			edgeSet.erase(edgeNO);
+			edgeSet[edgeNO] = false;
 			realEdgeSet.erase(edge);
 		}
 
@@ -77,6 +84,8 @@ class Graph {
 			hashValue = spgr->hashValue();
 			delete spgr;
 		}
+
+		int sizeOfGraph() { return realEdgeSet.size(); }
 	
 		void printGraph() {
 			int cnt = 0;
@@ -90,6 +99,7 @@ class Graph {
 					<< ", " << *(*it).rbegin() << ") ";
 			}
 			std::cout << std::endl;
+
 			std::cout << "{\"bond\":{\"aid2\": [";
 			for (std::set<std::set<int> >::iterator it = realEdgeSet.begin(); it != realEdgeSet.end(); it++) {
 				std::cout << *it->begin() << ",";
@@ -108,8 +118,7 @@ class SPGEnumerator {
 		std::set<int> edgeSet;
 		std::map<int, std::set<int> > n2e;
 		std::map<std::set<int>, int > e2n;
-		std::set<std::set<int> > graphVisited;
-		std::map<size_t, int> counter;
+		std::set<size_t> graphVisited;
 		bool isSPG;
 		SPGIdentifier spgi;
 		Graph g;
@@ -119,7 +128,8 @@ class SPGEnumerator {
 		void counting();
 
 	public:
-		std::vector<SimplifiedGraph> spgs;
+		std::map<size_t, int> counter;
+		std::map<int, int> GSPGSizeCounter;
 
 		SPGEnumerator(rapidjson::Document &d) {
 			isSPG = false;
@@ -138,6 +148,12 @@ class SPGEnumerator {
 		}
 		int sizeOfGraph() {
 			return edgeSet.size();
+		}
+		int numberOfSubgraph() {
+			return graphVisited.size();
+		}
+		int numberOfGSPG() {
+			return  counter.size();
 		}
 };
 

@@ -151,6 +151,6 @@ void testCase(char *f) {
 
 /*
 int main(int argc, char** argv) {
-	testCase();
+	testCase(argv[1]);
 }
 */

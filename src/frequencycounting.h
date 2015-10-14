@@ -10,13 +10,14 @@
 #include <unistd.h>
 #include <time.h>
 
+#define DEBUG
+
 class FrequencyCounter {
 	private:
-		static std::map<int, size_t> idxOfGraph;
 		static std::map<size_t, int> counter;
+		static std::map<int, int> GSPGSizeCounter;
 		static std::map<int, int> graphSizeCounter;
 		static std::map<int, double> avgElapsedTime;
-		static int cnt;
 		static Mutex output;
 
 	private:
@@ -39,28 +40,20 @@ class FrequencyCounter {
 
 			output.lock();
 			
-			if (graphSizeCounter.find(n) == graphSizeCounter.end()) {
-				graphSizeCounter[n] = 0;
-				avgElapsedTime[n] = 0;
-			}
 			updateAVG(n, (double)elapsed / CLOCKS_PER_SEC);
 
 			output.unlock();
 
 			size_t hvalue;
-			for (std::vector<SimplifiedGraph>::iterator it = spge.spgs.begin(); it != spge.spgs.end(); it++) {
-				hvalue = it->getHashValue();	
+			for (std::map<size_t, int>::iterator it = spge.counter.begin(); it != spge.counter.end(); it++) {
+				hvalue = it->first;	
 			output.lock();
-				if (counter.find(hvalue) ==
-						counter.end()) {
-					std::cout << hvalue << "\t"; 
-					it->printString();
-					idxOfGraph[cnt++] = hvalue;
-					counter[hvalue] = spge.frequency(hvalue);
-				} else {
-					counter[hvalue] += spge.frequency(hvalue);
-				}
+					counter[hvalue] = counter[hvalue] + it->second;
 			output.unlock();
+			}
+
+			for (std::map<int, int>::iterator it = spge.GSPGSizeCounter.begin(); it != spge.GSPGSizeCounter.end(); it++) {
+				GSPGSizeCounter[it->first] = GSPGSizeCounter[it->first] + it->second;
 			}
 
 			delete (rapidjson::Document*)d;	
@@ -75,39 +68,48 @@ class FrequencyCounter {
 			int cnt = 0;
 
 			while (getline(inputfile, smol)) {
-				std::cerr << cnt++ << std::endl;
+				std::cerr << "index of graph : " << cnt++ << std::endl;
 				d = new rapidjson::Document();
 				d->Parse(smol.c_str());
 
 				Task *t = new Task(&frequencyOneGraph, (void*)d);
 				tp.add_task(t);
+				//frequencyOneGraph((void*)d);
 			}
-
+			inputfile.close();
 
 			std::cerr << "start remaining tasks" << std::endl;
 			while (tp.task_number() > 0) {
-				sleep(10);
+				sleep(30);
 				std::cerr << tp.task_number() << std::endl;
 			}
 			
 			std::cerr << "destroy threadpool" << std::endl;
 			tp.destroy_threadpool();
 
-			std::string fn = string(fileName) + ".frequency";
+			std::string fn = string(fileName) + ".gspg.frequency";
 			std::ofstream outputfile(fn);
-			for(std::map<int, size_t>::iterator it = idxOfGraph.begin(); it != idxOfGraph.end(); it++) {
-				outputfile << it->second << "\t" << counter[it->second] << std::endl;
-			}
-			outputfile.close();
-
-			fn = string(fileName) + ".time";
-			outputfile.open(fn);
-			for(std::map<int, double>::iterator it = avgElapsedTime.begin(); it != avgElapsedTime.end(); it++) {
+			outputfile << "GSPGHASH\tFREQUENCY" << std::endl;
+			for(std::map<size_t, int>::iterator it = counter.begin(); it != counter.end(); it++) {
 				outputfile << it->first << "\t" << it->second << std::endl;
 			}
 			outputfile.close();
 
+			fn = string(fileName) + ".size.frequency";
+			outputfile.open(fn);
+			outputfile << "GSPGSIZE\tFREQUENCY" << std::endl;
+			for(std::map<int, int>::iterator it = GSPGSizeCounter.begin(); it != GSPGSizeCounter.end(); it++) {
+				outputfile << it->first << "\t" << it->second << std::endl;
+			}
+			outputfile.close();
 
+			fn = string(fileName) + ".size.time";
+			outputfile.open(fn);
+			outputfile << "GSIZE\tTIME" << std::endl;
+			for(std::map<int, double>::iterator it = avgElapsedTime.begin(); it != avgElapsedTime.end(); it++) {
+				outputfile << it->first << "\t" << it->second << std::endl;
+			}
+			outputfile.close();
 		}
 
 	public:
@@ -116,11 +118,10 @@ class FrequencyCounter {
 		}
 };
 
-std::map<int, size_t> FrequencyCounter::idxOfGraph;
 std::map<size_t, int> FrequencyCounter::counter;
+std::map<int, int> FrequencyCounter::GSPGSizeCounter;
 std::map<int, int> FrequencyCounter::graphSizeCounter;
 std::map<int, double> FrequencyCounter::avgElapsedTime;
-int FrequencyCounter::cnt;
 Mutex FrequencyCounter::output;
 
 #endif

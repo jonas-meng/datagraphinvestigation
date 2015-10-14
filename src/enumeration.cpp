@@ -15,6 +15,7 @@ void SPGEnumerator::initialization(rapidjson::Document &d) {
 	spgi.initialization(d);
 	isSPG = spgi.identify();
 	int a, b, length = d["bond"]["aid1"].Size();
+	g.setCapacity(length);
 	std::set<int> edge;
 	for (int i = 0; i < length; i++) {
 
@@ -41,7 +42,7 @@ void SPGEnumerator::start() {
 	std::map<int, std::set<int> > curAdjSet;
 	for (std::set<int>::iterator it = edgeSet.begin(); it != edgeSet.end(); it++) {
 		g.addNewEdge(n2e[*it], *it);
-		graphVisited.insert(g.edgeSet);
+		graphVisited.insert(g.hashEdgeSet());
 #ifdef DEBUG
 		std::cout << "SUB-GRAPH:"<< std::endl;
 		g.printGraph();
@@ -68,13 +69,14 @@ void SPGEnumerator::enumeration() {
 			edge.insert(b);
 
 			g.addNewEdge(edge, e2n[edge]);
-			if (graphVisited.find(g.edgeSet) == graphVisited.end()) {
+			if (graphVisited.find(g.hashEdgeSet()) == graphVisited.end()) {
 
-				graphVisited.insert(g.edgeSet);
+				graphVisited.insert(g.hashEdgeSet());
 #ifdef DEBUG
 				std::cout << "SUB-GRAPH:"<< std::endl;
 				g.printGraph();
 #endif
+				enumeration();
 				if (!isSPG) {
 					spgi.initialization(g.realEdgeSet);
 					if (spgi.identify()) {
@@ -98,10 +100,10 @@ void SPGEnumerator::constructAdjSet(std::map<int, std::set<int> > &curAdjSet) {
 			it != g.nodeSet.end(); it++) {
 		curAdjSet[*it] = adjSet[*it];
 	}
-	for (std::set<int>::iterator it = g.edgeSet.begin();
-			it != g.edgeSet.end(); it++) {
-		a = *n2e[*it].begin();
-		b = *n2e[*it].rbegin();
+	for (std::set<std::set<int> >::iterator it = g.realEdgeSet.begin();
+			it != g.realEdgeSet.end(); it++) {
+		a = *(*it).begin();
+		b = *(*it).rbegin();
 		curAdjSet[a].erase(b);
 		curAdjSet[b].erase(a);
 	}
@@ -109,18 +111,19 @@ void SPGEnumerator::constructAdjSet(std::map<int, std::set<int> > &curAdjSet) {
 
 
 void SPGEnumerator::displayFrequency() {
-	for (std::vector<SimplifiedGraph>::iterator it = spgs.begin(); it != spgs.end(); it++) {
-		it->display(counter[it->getHashValue()]);
-	}
 }
 
 void SPGEnumerator::counting() {
 	g.computation();
+	int size = g.sizeOfGraph();
+	if (GSPGSizeCounter.find(size) == GSPGSizeCounter.end()) {
+		GSPGSizeCounter[size] = 0;
+	}
 	if (counter.find(g.hashValue) == counter.end()) {
 		counter[g.hashValue] = 0;
-		spgs.push_back(SimplifiedGraph(g.realEdgeSet, g.hashValue));
 	}
 	counter[g.hashValue] = counter[g.hashValue]+1;
+	GSPGSizeCounter[size] = GSPGSizeCounter[size] + 1;
 }
 
 void testCase() {

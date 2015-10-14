@@ -569,7 +569,7 @@ bool SPGRepresentation::rule1_1() {
 #endif
 		res = true;
 		int a = *vertexSet.begin(), b = *vertexSet.rbegin(), c;
-		Label *newNodeLabel = new Label(), *t;
+		Label *newNodeLabel, *t;
 		std::set<int> edge;
 		edge.insert(a);
 		edge.insert(b);
@@ -1158,19 +1158,18 @@ void SPGRepresentation::printRepresentation() {
 
 void rprCaseTest(int n) {
 	rapidjson::Document d;
-	// 0: rule 0.2
+	// 0: rule 0.2, 1.1
 	// 1: rule 1.1
 	// 2: rule 2.2
 	// 3: rule 1.2
 	// 4: rule 1.2, 0.1, 2.2 
 	// 5: rule 2.1, 0.2, 1.1
-	// 6: rule 2.1, 0.1
+	// 6: rule 2.1, 1.3, 0.1
 	// 7: isomorphic to 6
 	// 8: present in paper
 	// 9: slight different with 8
 	// 10: isomorphic to 8
 	// 11
-	// 12
 	std::string json[] = {
 		"{\"bond\": {"
 		"\"aid2\":[1,1],"
@@ -1206,11 +1205,13 @@ void rprCaseTest(int n) {
 		"\"aid2\":[1,2,2,3,4,5,5,6,7,8,9,9,10,11,12,12,12,13,14],"
 		"\"aid1\":[13,13,14,14,15,6,15,7,15,12,10,12,11,12,13,14,15,14,15]"
 		"}}", "{\"bond\":{\"aid2\": [1,1,1,2,2,2,3,3,4,4,5,5,5,6,6,6,7,7,8,8,9,9,10,10,11,11,13,17],\"aid1\": [3,4,21,7,8,22,9,23,10,20,18,19,20,15,16,17,11,15,12,24,13,25,13,19,14,16,27,18]}}"};
+	std::cout << json[n] << std::endl;
 	d.Parse(json[n].c_str());
 
 	SPGRepresentation rpr = SPGRepresentation(d);
 	rpr.computation();
 	rpr.printRepresentation();
+	std::cout << "Hash Value: " << rpr.hashValue() << std::endl;
 
 	/*
 	d.Parse(json[9].c_str());
@@ -1230,7 +1231,7 @@ void rprCaseTest(int n) {
 /*
 int main(int argc, char **argv) {
 	//labelCaseTest();
-	int a;
+	int a = 11;
 	std::cout << "Graph Number: ";
 	while (std::cin>>a) {
 		rprCaseTest(a);
