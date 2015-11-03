@@ -60,8 +60,8 @@ class FrequencyCounter {
 		}
 
 		static	void counting(char *fileName, int nOfThread) {
-			ThreadPool tp(nOfThread);
-			tp.initialize_threadpool();
+			//ThreadPool tp(nOfThread);
+			//tp.initialize_threadpool();
 			std::string smol;
 			std::ifstream inputfile(fileName);
 			rapidjson::Document *d;
@@ -72,12 +72,13 @@ class FrequencyCounter {
 				d = new rapidjson::Document();
 				d->Parse(smol.c_str());
 
-				Task *t = new Task(&frequencyOneGraph, (void*)d);
-				tp.add_task(t);
-				//frequencyOneGraph((void*)d);
+			//	Task *t = new Task(&frequencyOneGraph, (void*)d);
+			//	tp.add_task(t);
+				frequencyOneGraph((void*)d);
 			}
 			inputfile.close();
 
+			/*
 			std::cerr << "start remaining tasks" << std::endl;
 			while (tp.task_number() > 0) {
 				sleep(30);
@@ -86,6 +87,7 @@ class FrequencyCounter {
 			
 			std::cerr << "destroy threadpool" << std::endl;
 			tp.destroy_threadpool();
+			*/
 
 			std::string fn = string(fileName) + ".gspg.frequency";
 			std::ofstream outputfile(fn);

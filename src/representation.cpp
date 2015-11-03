@@ -91,6 +91,7 @@ void Label::nodeReconstruct(int number, symbol *s) {
 #ifdef DEBUG
 			std::cout << "RULE 0.1 UNPACK" << std::endl;
 			displayAdjSet();
+			std::cout << "--------------" << std::endl;
 #endif
 		} else if (s->ruleNO == 11) {
 			t = ++nodeCounter;
@@ -105,6 +106,7 @@ void Label::nodeReconstruct(int number, symbol *s) {
 #ifdef DEBUG
 			std::cout << "RULE 1.1 UNPACK" << std::endl;
 			displayAdjSet();
+			std::cout << "--------------" << std::endl;
 #endif
 		} else if (s->ruleNO == 12) {
 			t = ++nodeCounter;	
@@ -119,12 +121,14 @@ void Label::nodeReconstruct(int number, symbol *s) {
 #ifdef DEBUG
 			std::cout << "RULE 1.2 UNPACK" << std::endl;
 			displayAdjSet();
+			std::cout << "--------------" << std::endl;
 #endif
 		} else if (s->ruleNO == 13) {
 			edgeReconstruct(number, number, *(s->components.begin()));
 #ifdef DEBUG
 			std::cout << "RULE 1.3 UNPACK" << std::endl;
 			displayAdjSet();
+			std::cout << "--------------" << std::endl;
 #endif
 		} else if (s->ruleNO == 22) {
 			int t1 = number, t2;
@@ -151,6 +155,7 @@ void Label::nodeReconstruct(int number, symbol *s) {
 #ifdef DEBUG
 			std::cout << "RULE 2.2 UNPACK" << std::endl;
 			displayAdjSet();
+			std::cout << "--------------" << std::endl;
 #endif
 		} else {
 			std::cerr << "WRONG RULE NUMBER FOR NODE:" << s->ruleNO << std::endl;
@@ -163,7 +168,7 @@ void Label::edgeReconstruct(int a, int b, symbol *s) {
 	if (s->ruleNO != -1) {
 		if (s->ruleNO == 2) {
 			for (std::vector<symbol*>::iterator it = s->components.begin(); it != s->components.end(); it++) { 
-				if ((*it)->orientation == -1) {
+				if ((*it)->orientation == 1) {
 					edgeReconstruct(b, a, *it);
 				} else {
 					edgeReconstruct(a, b, *it);
@@ -172,13 +177,14 @@ void Label::edgeReconstruct(int a, int b, symbol *s) {
 #ifdef DEBUG
 			std::cout << "RULE 0.2 UNPACK" << std::endl;
 			displayAdjSet();
+			std::cout << "--------------" << std::endl;
 #endif
 		} else if (s->ruleNO == 21) {
 			int t1 = a, t2;
 			std::vector<symbol*>::iterator it = s->components.begin();
 			for (; (it+1) != s->components.end();) { 
 				t2 = ++nodeCounter;
-				if ((*it)->orientation == -1) {
+				if ((*it)->orientation == 1) {
 					edgeReconstruct(t2, t1, *(it++));
 				} else {
 					edgeReconstruct(t1, t2, *(it++));
@@ -187,7 +193,7 @@ void Label::edgeReconstruct(int a, int b, symbol *s) {
 				t1 = t2;
 			}
 			t2 = b;
-			if ((*it)->orientation == -1) {
+			if ((*it)->orientation == 1) {
 				edgeReconstruct(t2, t1, *(it++));
 			} else {
 				edgeReconstruct(t1, t2, *(it++));
@@ -195,9 +201,11 @@ void Label::edgeReconstruct(int a, int b, symbol *s) {
 #ifdef DEBUG
 			std::cout << "RULE 2.1 UNPACK" << std::endl;
 			displayAdjSet();
+			std::cout << "--------------" << std::endl;
 #endif
 		} else {
 			std::cerr << "WRONG RULE NUMBER FOR EDGE:" << s->ruleNO << std::endl;
+			s->display();
 		}
 	} else {
 		adjSet[a].insert(b);
@@ -226,35 +234,45 @@ void Label::parseRepresentation() {
 Label::symbol *Label::recursivePaser() {
 	int c, n;
 	Label::symbol *s = new symbol(), *t;
+	s->orientation = 0; // invalid value indicating unfinished representation of edge
 	std::vector<bool>::iterator beg = walker;
 	while (true) { // end of label
 		c = readOneChar();
 		if (c == 4) { // start of label
 			t = recursivePaser();
-			s->components.push_back(t);
+			if (t->orientation == 0 && t->notation == 1) { // unfinished edge representation
+				c = readOneChar(); // read orientation bits
+				t->orientation = c;
+				delete s;
+				s = t;
+				c = readOneChar(); // read right parenthesis
+				return s;
+			} else {
+				s->components.push_back(t);
+			}
 		} else if (c == 2) { // possible simple node or edge
 			c = readOneChar();
 			if (c == 0) { // simple node
 				s->notation = 0;
 				s->ruleNO = -1;
-				s->orientation = 0;
+				s->orientation = 2;
 			} else if (c == 2) { // simple edge
 				s->notation = 1;	
 				s->ruleNO = -1;
-				s->orientation = 0;
+				s->orientation = 2;
 				c = readOneChar(); // read right parenthesis
 			} else {
-				std::cerr << "UNEXPECTED END OF REPRESENTATION" << std::endl;
+				std::cerr << "INSIDE UNEXPECTED END OF REPRESENTATION : " << c << std::endl;
 			}
 			return s;
 		} else if (c == 0) {
 			break;
-		} else if (c >0 && c < 4) {
-			// orientation of edge	
-			s->orientation = c;	
-
+		} else if (c > 0 && c < 4) {
+			s->orientation = c;
+		} else if (c == -1) {
+			break;
 		} else {
-			std::cerr << "UNEXPECTED END OF REPRESENTATION" << std::endl;
+			std::cerr << "OUTSIDE UNEXPECTED END OF REPRESENTATION : " << c << std::endl;
 		}
 	}	
 	std::vector<bool>::iterator end = walker;
@@ -268,8 +286,12 @@ Label::symbol *Label::recursivePaser() {
 			case 4: std::cout << "("; break;
 		}
 	}
+#ifdef DEBUG
+	std::cout << std::endl;
+#endif
 	determineSymbolNotation(s);
-	std::cout  << " " << s->ruleNO <<  " " << s->orientation << " " << s->notation << std::endl;
+	std::cout  << "Rule NO : " << s->ruleNO <<  "  Orientation : " 
+		<< s->orientation << " Notation : " << s->notation << std::endl;
 
 	return s;
 }
@@ -279,9 +301,15 @@ void Label::determineSymbolNotation(symbol *s) {
 	first = (*(s->components).begin())->notation;
 	last = (*(s->components).rbegin())->notation;
 	for (std::vector<symbol*>::iterator it = s->components.begin(); it != s->components.end(); it++) {
+#ifdef DEBUG
+		std::cout << (*it)->notation << ",";
+#endif
 		if ((*it)->notation == 0) non++;
 		else noe++;
 	}
+#ifdef DEBUG
+	std::cout << std::endl;
+#endif
 	if (noe == 0) {
 		s->notation = 0;
 		s->ruleNO = 1;
@@ -1224,18 +1252,12 @@ void rprCaseTest(int n) {
 		std::cout << "WRONG CONSTRUCTION" << std::endl;
 	}
 	*/
-	//rpr.unpack();
+	std::cout << "---- RECONSTRUCTION BEGINS ----" << std::endl;
+	rpr.unpack();
 	//rpr.displayAdjSet();
 }
 
-/*
 int main(int argc, char **argv) {
 	//labelCaseTest();
-	int a = 11;
-	std::cout << "Graph Number: ";
-	while (std::cin>>a) {
-		rprCaseTest(a);
-		std::cout << "Graph Number: ";
-	}
+	//rprCaseTest(8);
 }
-*/

@@ -32,6 +32,14 @@ class Label {
 			int orientation;
 			std::vector<symbol*> components;
 
+			void display() {
+				for (std::vector<symbol*>::iterator it = components.begin();
+						it != components.end(); it++) {
+					std::cerr << (*it)->notation << ",";
+				}
+				std::cerr << std::endl;
+			}
+
 			~symbol() {
 				for (std::vector<symbol*>::iterator it = components.begin(); it!= components.end(); it++) {
 					delete (*it);
@@ -65,7 +73,18 @@ class Label {
 			return res;
 		}
 
-		void backOneChar() { walker = walker - 3; }
+		bool putBackOneChar() {
+			int n = 3;
+			bool res = true;
+			while (n--) {
+				if (walker == v.begin()) {
+					res = false;
+					break;
+				}
+				walker--;
+			}
+			return res;
+		}
 
 		int readOneChar(std::vector<bool>::iterator it) {
 			int res = 0;
